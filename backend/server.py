@@ -29,7 +29,7 @@ def ensure_events_file() -> Path:
         if "sample-001" not in content:
             return DATA_PATH
 
-    # Intentamos primero ejecutar el scraper para obtener datos reales
+    # Intentamos ejecutar el scraper para obtener datos reales
     command = [
         sys.executable,
         str(SCRAPER_PATH),
@@ -42,18 +42,13 @@ def ensure_events_file() -> Path:
     ]
     subprocess.run(command, check=False)
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        # Verificamos que lo que el scraper guardó no sean los samples por error
         content = DATA_PATH.read_text(encoding="utf-8")
         if "sample-001" not in content:
             return DATA_PATH
 
-    # Si el scraper falla o sigue dando samples, usamos los datos de ejemplo como último recurso
-    if SAMPLE_PATH.exists():
-        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        return DATA_PATH
-
-    raise FileNotFoundError("No se pudo generar el JSON de eventos ni encontrar datos de ejemplo.")
+    # ELIMINADO: Ya no usamos datos de ejemplo.
+    # Queremos ver el error real para poder arreglarlo.
+    raise RuntimeError("El robot de scraping ha fallado en el servidor de Render. Por favor, copia este error y dáselo a Claude.")
 
 
 class EventHandler(BaseHTTPRequestHandler):
