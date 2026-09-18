@@ -27,11 +27,7 @@ def ensure_events_file() -> Path:
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
         return DATA_PATH
 
-    if SAMPLE_PATH.exists():
-        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        return DATA_PATH
-
+    # Intentamos primero ejecutar el scraper para obtener datos reales
     command = [
         sys.executable,
         str(SCRAPER_PATH),
@@ -45,7 +41,14 @@ def ensure_events_file() -> Path:
     subprocess.run(command, check=False)
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
         return DATA_PATH
-    raise FileNotFoundError("No se pudo generar el JSON de eventos.")
+
+    # Si el scraper falla, usamos los datos de ejemplo como último recurso
+    if SAMPLE_PATH.exists():
+        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        return DATA_PATH
+
+    raise FileNotFoundError("No se pudo generar el JSON de eventos ni encontrar datos de ejemplo.")
 
 
 class EventHandler(BaseHTTPRequestHandler):
