@@ -73,10 +73,12 @@ class EventHandler(BaseHTTPRequestHandler):
                 self.wfile.write(payload.encode("utf-8"))
                 return
             except Exception as exc:
+                import traceback
+                error_detail = traceback.format_exc()
                 self.send_response(500)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+                self.wfile.write(f"DETALLE DEL ERROR:\n\n{error_detail}".encode("utf-8"))
                 return
 
         self.send_response(404)
