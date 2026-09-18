@@ -1,0 +1,38 @@
+[
+  {
+    "id": "sample-001",
+    "title": "Exposición de arte. Eduardo Blasco, Elena Seco y Alina Andrea Baranescu",
+    "description": "Exposición de arte en el Centro Cívico Distrito 14 (La Jota).",
+    "category": "exposiciones",
+    "date": "2026-09-17",
+    "time": "08:00",
+    "place": "Centro Cívico Distrito 14 (La Jota)",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/314039",
+    "source": "ayuntamiento",
+    "lastUpdated": "2026-09-17T10:00:00Z"
+  },
+  {
+    "id": "sample-002",
+    "title": "Gigante",
+    "description": "Obra de teatro en el Teatro Principal de Zaragoza.",
+    "category": "teatro",
+    "date": "2026-09-17",
+    "time": "20:00",
+    "place": "Teatro Principal",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/312369",
+    "source": "ayuntamiento",
+    "lastUpdated": "2026-09-17T10:00:00Z"
+  },
+  {
+    "id": "sample-003",
+    "title": "Ruta de tapas del barrio",
+    "description": "Tapa route en distintos puntos del centro de Zaragoza.",
+    "category": "gastronomia",
+    "date": "2026-09-18",
+    "time": "19:30",
+    "place": "Centro de Zaragoza",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/000001",
+    "source": "ayuntamiento",
+    "lastUpdated": "2026-09-17T10:00:00Z"
+  }
+]

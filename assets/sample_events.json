@@ -1,0 +1,62 @@
+[
+  {
+    "id": "zaragoza-314039",
+    "title": "Exposición de arte. Eduardo Blasco, Elena Seco y Alina Andrea Baranescu",
+    "description": "Exposición de arte en el Centro Cívico Distrito 14 (La Jota). La muestra reúne obras contemporáneas de artistas locales y nacionales.",
+    "category": "exposiciones",
+    "date": "2026-09-17",
+    "time": "08:00",
+    "place": "Centro Cívico Distrito 14 (La Jota)",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/314039"
+  },
+  {
+    "id": "zaragoza-312369",
+    "title": "Gigante",
+    "description": "Obra teatral en el Teatro Principal que llega con un formato escénico moderno y una propuesta cultural muy intensa para la ciudad.",
+    "category": "teatro",
+    "date": "2026-09-17",
+    "time": "20:00",
+    "place": "Teatro Principal",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/312369"
+  },
+  {
+    "id": "zaragoza-314449",
+    "title": "El jazz a través de la lente de Santi Cogolludo",
+    "description": "Una propuesta musical con enfoque artístico y cultural en el Centro Cívico Joaquín Carbonell.",
+    "category": "musica",
+    "date": "2026-09-17",
+    "time": "19:30",
+    "place": "Centro Cívico Joaquín Carbonell (Casetas)",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/314449"
+  },
+  {
+    "id": "zaragoza-308581",
+    "title": "Mercado Agroecológico y agroeconómico Zaragoza",
+    "description": "Encuentro con productores locales, actividades gastronómicas y propuestas culturales del entorno urbano.",
+    "category": "gastronomia",
+    "date": "2026-09-18",
+    "time": "18:30",
+    "place": "Varios lugares",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/308581"
+  },
+  {
+    "id": "zaragoza-314195",
+    "title": "Zaragoza Cocktail Week",
+    "description": "Semana gastronómica y de ocio con experiencias de coctelería, eventos culturales y propuestas en distintos puntos de la ciudad.",
+    "category": "gastronomia",
+    "date": "2026-09-20",
+    "time": "21:00",
+    "place": "Varios lugares",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/314195"
+  },
+  {
+    "id": "zaragoza-311667",
+    "title": "Cuarenta años de estudios de paz. Muestra de Pablo C. Lahoz",
+    "description": "Exhibición cultural y documental que reúne propuestas de memoria, arte y reflexión social.",
+    "category": "exposiciones",
+    "date": "2026-09-19",
+    "time": "10:00",
+    "place": "Centro Cívico Antonio Beltrán Martínez (Garrapinillos)",
+    "officialUrl": "https://www.zaragoza.es/sede/servicio/cultura/evento/311667"
+  }
+]

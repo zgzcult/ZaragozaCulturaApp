@@ -1,0 +1,2 @@
+playwright>=1.63,<2
+# Playwright usa Chrome instalado para leer el calendario después de ejecutar JavaScript.
