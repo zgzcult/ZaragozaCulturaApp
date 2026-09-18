@@ -161,14 +161,17 @@ def fetch_public_event_ids(base_url: str) -> set[str]:
     local_chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 
     with sync_playwright() as playwright:
-        launch_args = {"headless": True}
+        launch_args = {
+            "headless": True,
+            "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        }
         if os.name == 'nt' and os.path.exists(local_chrome_path):
             launch_args["executable_path"] = local_chrome_path
 
         browser = playwright.chromium.launch(**launch_args)
         page = browser.new_page(locale="es-ES")
         try:
-            page.goto(base_url, wait_until="networkidle", timeout=90000)
+            page.goto(base_url, wait_until="domcontentloaded", timeout=90000)
             page.locator("#selected-day").wait_for(state="visible", timeout=30000)
             days = page.locator("#calendarV2 .calendar-dates .day")
             public_ids: set[str] = set()
