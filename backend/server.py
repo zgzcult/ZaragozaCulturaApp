@@ -25,7 +25,9 @@ SAMPLE_PATH = BASE_DIR / "data" / "zaragoza_events.sample.json"
 
 def ensure_events_file() -> Path:
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        return DATA_PATH
+        content = DATA_PATH.read_text(encoding="utf-8")
+        if "sample-001" not in content:
+            return DATA_PATH
 
     # Intentamos primero ejecutar el scraper para obtener datos reales
     command = [
@@ -40,9 +42,12 @@ def ensure_events_file() -> Path:
     ]
     subprocess.run(command, check=False)
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        return DATA_PATH
+        # Verificamos que lo que el scraper guardó no sean los samples por error
+        content = DATA_PATH.read_text(encoding="utf-8")
+        if "sample-001" not in content:
+            return DATA_PATH
 
-    # Si el scraper falla, usamos los datos de ejemplo como último recurso
+    # Si el scraper falla o sigue dando samples, usamos los datos de ejemplo como último recurso
     if SAMPLE_PATH.exists():
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
         DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
