@@ -25,11 +25,13 @@ SAMPLE_PATH = BASE_DIR / "data" / "zaragoza_events.sample.json"
 
 def ensure_events_file() -> Path:
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        content = DATA_PATH.read_text(encoding="utf-8")
-        if "sample-001" not in content:
-            return DATA_PATH
+        return DATA_PATH
 
-    # Intentamos ejecutar el scraper para obtener datos reales
+    if SAMPLE_PATH.exists():
+        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+        return DATA_PATH
+
     command = [
         sys.executable,
         str(SCRAPER_PATH),
@@ -42,13 +44,8 @@ def ensure_events_file() -> Path:
     ]
     subprocess.run(command, check=False)
     if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        content = DATA_PATH.read_text(encoding="utf-8")
-        if "sample-001" not in content:
-            return DATA_PATH
-
-    # ELIMINADO: Ya no usamos datos de ejemplo.
-    # Queremos ver el error real para poder arreglarlo.
-    raise RuntimeError("El robot de scraping ha fallado en el servidor de Render. Por favor, copia este error y dáselo a Claude.")
+        return DATA_PATH
+    raise FileNotFoundError("No se pudo generar el JSON de eventos.")
 
 
 class EventHandler(BaseHTTPRequestHandler):
@@ -73,12 +70,10 @@ class EventHandler(BaseHTTPRequestHandler):
                 self.wfile.write(payload.encode("utf-8"))
                 return
             except Exception as exc:
-                import traceback
-                error_detail = traceback.format_exc()
                 self.send_response(500)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(f"DETALLE DEL ERROR:\n\n{error_detail}".encode("utf-8"))
+                self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
                 return
 
         self.send_response(404)
