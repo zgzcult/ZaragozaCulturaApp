@@ -6,7 +6,7 @@ on:
       - cron: '0 3 * * *'
     workflow_dispatch: # Permite ejecutarlo manualmente desde el botón "Run workflow"
 
-  jobs:
+jobs:
     scrape:
       runs-on: ubuntu-latest
 
