@@ -1,6 +1,6 @@
 name: Daily Cultural Events Scraper
 
-  on:
+on:
     schedule:
       # Se ejecuta todos los días a las 03:00 UTC
       - cron: '0 3 * * *'
