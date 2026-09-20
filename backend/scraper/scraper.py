@@ -16,6 +16,7 @@ import json
 import re
 import sys
 import time
+import os
 from datetime import datetime, timedelta, timezone
 from hashlib import sha1
 from html import unescape
@@ -24,6 +25,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
+from pymongo import MongoClient
 
 BASE_URL = "https://www.zaragoza.es/sede/servicio/cultura/"
 DATASET_URL = "https://www.zaragoza.es/sede/servicio/data/dataset-282/_search"
@@ -171,7 +173,7 @@ def fetch_public_event_ids(base_url: str) -> set[str]:
         browser = playwright.chromium.launch(**launch_args)
         page = browser.new_page(locale="es-ES")
         try:
-            page.goto(base_url, wait_until="domcontentloaded", timeout=90000)
+            page.goto(base_url, wait_until="networkidle", timeout=90000)
             page.locator("#selected-day").wait_for(state="visible", timeout=30000)
             days = page.locator("#calendarV2 .calendar-dates .day")
             public_ids: set[str] = set()
@@ -546,6 +548,34 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
     return events
 
 
+def save_to_mongodb(data: List[Dict[str, Any]]) -> None:
+    uri = os.environ.get("MONGODB_URI")
+    if not uri:
+        print("[ERROR] MONGODB_URI no configurada en las variables de entorno", file=sys.stderr)
+        # Fallback to local file for development if needed, or just fail
+        write_json(data, DEFAULT_OUTPUT)
+        print(f"[WARN] Guardado en archivo local como fallback: {DEFAULT_OUTPUT}")
+        return
+
+    try:
+        client = MongoClient(uri)
+        db = client["zaragoza_cultura"]
+        collection = db["events"]
+
+        for event in data:
+            # Usamos el id (hash SHA1) como filtro para evitar duplicados
+            collection.update_one(
+                {"id": event["id"]},
+                {"$set": event},
+                upsert=True
+            )
+        print(f"[OK] {len(data)} eventos sincronizados con MongoDB Atlas.")
+        client.close()
+    except Exception as exc:
+        print(f"[ERROR] Fallo al conectar con MongoDB: {exc}", file=sys.stderr)
+        write_json(data, DEFAULT_OUTPUT)
+        print(f"[WARN] Guardado en archivo local como fallback: {DEFAULT_OUTPUT}")
+
 def write_json(data: List[Dict[str, Any]], output_path: str) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -566,8 +596,8 @@ def main() -> int:
     args = parse_args()
     try:
         events = collect_events(args.base_url, limit=args.limit)
-        write_json(events, args.output)
-        print(f"[OK] {len(events)} eventos extraídos y guardados en {args.output}")
+        save_to_mongodb(events)
+        print(f"[OK] {len(events)} eventos extraídos y procesados.")
         return 0
     except Exception as exc:  # pragma: no cover - para diagnóstico en producción
         print(f"[ERROR] Fallo general del scraper: {exc}", file=sys.stderr)

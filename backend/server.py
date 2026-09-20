@@ -2,51 +2,37 @@
 """Servidor mínimo para exponer la agenda cultural en JSON.
 
 Flujo:
-1. asegura que exista backend/data/zaragoza_events.json
-2. si no existe, lo genera ejecutando el scraper
-3. sirve ese JSON en /events
-4. expone una pequeña home para pruebas locales
+1. Se conecta a MongoDB Atlas usando la variable de entorno MONGODB_URI.
+2. Sirve los eventos de la colección 'events' en /events.
+3. Expone una pequeña home para pruebas locales.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from pymongo import MongoClient
 
-BASE_DIR = Path(__file__).resolve().parent
-SCRAPER_PATH = BASE_DIR / "scraper" / "scraper.py"
-DATA_PATH = BASE_DIR / "data" / "zaragoza_events.json"
-SAMPLE_PATH = BASE_DIR / "data" / "zaragoza_events.sample.json"
+# Configuración de MongoDB
+MONGODB_URI = os.environ.get("MONGODB_URI")
 
+def get_events_from_db():
+    if not MONGODB_URI:
+        raise RuntimeError("MONGODB_URI no está configurada en las variables de entorno")
 
-def ensure_events_file() -> Path:
-    if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        return DATA_PATH
-
-    if SAMPLE_PATH.exists():
-        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DATA_PATH.write_text(SAMPLE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-        return DATA_PATH
-
-    command = [
-        sys.executable,
-        str(SCRAPER_PATH),
-        "--base-url",
-        "https://www.zaragoza.es/sede/servicio/cultura/",
-        "--output",
-        str(DATA_PATH),
-        "--limit",
-        "10000",
-    ]
-    subprocess.run(command, check=False)
-    if DATA_PATH.exists() and DATA_PATH.stat().st_size > 0:
-        return DATA_PATH
-    raise FileNotFoundError("No se pudo generar el JSON de eventos.")
-
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        db = client["zaragoza_cultura"]
+        collection = db["events"]
+        # Retornamos los eventos excluyendo el _id interno de MongoDB
+        events = list(collection.find({}, {"_id": 0}))
+        client.close()
+        return events
+    except Exception as exc:
+        raise RuntimeError(f"Error conectando a MongoDB: {exc}")
 
 class EventHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -61,8 +47,8 @@ class EventHandler(BaseHTTPRequestHandler):
 
         if self.path in ("/events", "/events.json"):
             try:
-                json_path = ensure_events_file()
-                payload = json_path.read_text(encoding="utf-8")
+                events = get_events_from_db()
+                payload = json.dumps(events, ensure_ascii=False, indent=2)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")
@@ -83,7 +69,6 @@ class EventHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
