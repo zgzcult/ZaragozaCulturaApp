@@ -1,7 +1,7 @@
-name: Daily Cultural Events Scraper
+name: "Daily Cultural Events Scraper"
 
   on:
-    workflow_dispatch:
+    workflow_dispatch: {}
 
   jobs:
     scrape:
@@ -11,11 +11,9 @@ name: Daily Cultural Events Scraper
         - uses: actions/setup-python@v5
           with:
             python-version: '3.12'
-        - name: Install
-          run: |
+        - run: |
             pip install -r backend/requirements.txt
             playwright install chromium --with-deps
-        - name: Run
+        - run: python backend/scraper/scraper.py
           env:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          run: python backend/scraper/scraper.py
