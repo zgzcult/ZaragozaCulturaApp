@@ -1,9 +1,9 @@
 name: "Daily Cultural Events Scraper"
 
-  on:
+on:
     workflow_dispatch: {}
 
-  jobs:
+jobs:
     scrape:
       runs-on: ubuntu-latest
       steps:
