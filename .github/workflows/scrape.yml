@@ -1,6 +1,8 @@
 name: "Daily Cultural Events Scraper"
 
 on:
+    schedule:
+      - cron: '0 3 * * *' # Se ejecuta todos los días a las 03:00 UTC
     workflow_dispatch: {}
 
 jobs:
