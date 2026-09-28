@@ -13,13 +13,15 @@ jobs:
       runs-on: self-hosted
       steps:
         - uses: actions/checkout@v4
-        - uses: actions/setup-python@v5
-          with:
-            python-version: '3.12'
+        # No usamos actions/setup-python aqui: su instalador silencioso de
+        # Python falla en este PC (MSI error 1603 en el paquete "dev", causa
+        # nunca resuelta). En su lugar usamos el Python ya instalado en el
+        # sistema (C:\Program Files\Python312), instalado a mano una vez.
         - shell: bash
           run: |
-            pip install -r backend/requirements.txt
-            playwright install chromium
+            python --version
+            python -m pip install -r backend/requirements.txt
+            python -m playwright install chromium
         - shell: bash
           run: python backend/scraper/scraper.py
           env:
