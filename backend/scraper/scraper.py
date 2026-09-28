@@ -175,8 +175,19 @@ def fetch_public_event_ids(base_url: str, months_ahead: int = 3) -> set[str]:
         browser = playwright.chromium.launch(**launch_args)
         page = browser.new_page(locale="es-ES")
         try:
-            page.goto(base_url, wait_until="networkidle", timeout=90000)
-            page.locator("#selected-day").wait_for(state="visible", timeout=30000)
+            last_error: Exception | None = None
+            for attempt in range(3):
+                try:
+                    page.goto(base_url, wait_until="domcontentloaded", timeout=120000)
+                    page.locator("#selected-day").wait_for(state="visible", timeout=60000)
+                    last_error = None
+                    break
+                except Exception as exc:  # noqa: BLE001 - retry on any transient nav failure
+                    last_error = exc
+                    print(f"[WARN] Intento {attempt + 1}/3 de cargar el calendario fallo: {exc}", file=sys.stderr)
+                    page.wait_for_timeout(3000)
+            if last_error is not None:
+                raise last_error
             public_ids: set[str] = set()
             for month_offset in range(months_ahead + 1):
                 days = page.locator("#calendarV2 .calendar-dates .day")
