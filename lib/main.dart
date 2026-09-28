@@ -258,7 +258,7 @@ class ZaragozaEventsRepository {
       try {
         final response = await http
             .get(Uri.parse(apiUrl))
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 45));
 
         if (response.statusCode == 200) {
           final decoded = jsonDecode(response.body);
