@@ -154,8 +154,10 @@ def fetch_json(url: str, payload: Dict[str, Any], timeout: int = 40) -> Dict[str
         return json.loads(response.read().decode("utf-8"))
 
 
-def fetch_public_event_ids(base_url: str) -> set[str]:
-    """Return event IDs rendered by the public calendar for the current month."""
+def fetch_public_event_ids(base_url: str, months_ahead: int = 3) -> set[str]:
+    """Return event IDs rendered by the public calendar for the current month
+    plus the following `months_ahead` months, so events already published for
+    next month aren't dropped just because the scraper ran earlier."""
     import os
     from playwright.sync_api import sync_playwright
 
@@ -175,19 +177,23 @@ def fetch_public_event_ids(base_url: str) -> set[str]:
         try:
             page.goto(base_url, wait_until="networkidle", timeout=90000)
             page.locator("#selected-day").wait_for(state="visible", timeout=30000)
-            days = page.locator("#calendarV2 .calendar-dates .day")
             public_ids: set[str] = set()
-            for index in range(days.count()):
-                days.nth(index).click()
-                page.wait_for_timeout(150)
-                links = page.locator("#selected-day a[href*='/sede/servicio/cultura/evento/']").evaluate_all(
-                    "elements => elements.map(element => element.href)"
-                )
-                public_ids.update(
-                    match.group(1)
-                    for link in links
-                    if (match := re.search(r"/evento/(\d+)$", link))
-                )
+            for month_offset in range(months_ahead + 1):
+                days = page.locator("#calendarV2 .calendar-dates .day")
+                for index in range(days.count()):
+                    days.nth(index).click()
+                    page.wait_for_timeout(150)
+                    links = page.locator("#selected-day a[href*='/sede/servicio/cultura/evento/']").evaluate_all(
+                        "elements => elements.map(element => element.href)"
+                    )
+                    public_ids.update(
+                        match.group(1)
+                        for link in links
+                        if (match := re.search(r"/evento/(\d+)$", link))
+                    )
+                if month_offset < months_ahead:
+                    page.locator("#calendar_next").click()
+                    page.wait_for_timeout(300)
             return public_ids
         finally:
             browser.close()
@@ -412,7 +418,7 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
                     "imageUrl": normalize_text(source.get("image")),
                     "source": "ayuntamiento",
                     "sourceId": str(source.get("id", "")),
-                    "endDate": end.strftime("%Y-%m-%d"),
+                    "endDate": event_date,
                     "endTime": normalize_text(opening.get("endTime")),
                     "lastUpdated": now_iso(),
                 })
@@ -503,12 +509,10 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
     try:
         dataset_events: List[Dict[str, Any]] = []
         current_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        from_date = current_date.replace(day=1)
-        if current_date.month == 12:
-            to_date = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            to_date = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
-        public_ids = fetch_public_event_ids(base_url)
+        months_ahead = 3
+        from_date = current_date
+        to_date = current_date + timedelta(days=30 * (months_ahead + 1))
+        public_ids = fetch_public_event_ids(base_url, months_ahead=months_ahead)
         print(f"[OK] {len(public_ids)} fichas publicadas en el calendario visible", file=sys.stderr)
         public_sources = fetch_dataset(from_date, to_date)
         for source in public_sources:
