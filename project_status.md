@@ -15,7 +15,7 @@ The app has been migrated from a local-file system to a professional decoupled c
 ### 2. Data Collector (The Robot/Scraper)
 - **Technology**: Python + Playwright (Chromium)
 - **Execution**: GitHub Actions, **self-hosted runner on this PC** (not GitHub-hosted — see below)
-- **Schedule**: Every **Monday at 12:00 UTC**, plus manual trigger anytime (`workflow_dispatch`)
+- **Schedule**: Every **2 days at 12:00 UTC**, plus manual trigger anytime (`workflow_dispatch`)
 - **Storage**: Performs `upsert` operations on the `events` collection in MongoDB Atlas.
 - **Lookahead window**: current month + 3 following months (~90 days), matching the app's 45-day forward calendar with margin.
 - **Configuration**: `.github/workflows/scrape.yml`
