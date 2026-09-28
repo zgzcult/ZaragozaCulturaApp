@@ -16,6 +16,15 @@ jobs:
         - run: |
             pip install -r backend/requirements.txt
             playwright install chromium --with-deps
+        - name: Diagnose connectivity to zaragoza.es
+          run: |
+            echo "--- Plain HTTP GET to homepage ---"
+            curl -v -m 20 -o /dev/null "https://www.zaragoza.es/sede/servicio/cultura/" || true
+            echo "--- Plain HTTP POST to dataset API ---"
+            curl -v -m 20 -o /dev/null -X POST -H "Content-Type: application/json" \
+              -d '{"from":0,"size":1,"query":{"match_all":{}}}' \
+              "https://www.zaragoza.es/sede/servicio/data/dataset-282/_search" || true
+          continue-on-error: true
         - run: python backend/scraper/scraper.py
           env:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}

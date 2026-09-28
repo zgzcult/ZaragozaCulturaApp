@@ -523,8 +523,12 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
         months_ahead = 3
         from_date = current_date
         to_date = current_date + timedelta(days=30 * (months_ahead + 1))
-        public_ids = fetch_public_event_ids(base_url, months_ahead=months_ahead)
-        print(f"[OK] {len(public_ids)} fichas publicadas en el calendario visible", file=sys.stderr)
+        try:
+            public_ids = fetch_public_event_ids(base_url, months_ahead=months_ahead)
+            print(f"[OK] {len(public_ids)} fichas publicadas en el calendario visible", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 - calendar check is a nice-to-have, not a hard requirement
+            public_ids = None
+            print(f"[WARN] No se pudo verificar el calendario público, se usara el dataset sin filtrar: {exc}", file=sys.stderr)
         public_sources = fetch_dataset(from_date, to_date)
         for source in public_sources:
             try:
