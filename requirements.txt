@@ -1,0 +1,4 @@
+playwright>=1.63,<2
+pymongo[srv]>=4.0
+# Playwright usa Chrome instalado para leer el calendario después de ejecutar JavaScript.
+# pymongo[srv] es necesario para conectar con MongoDB Atlas.
