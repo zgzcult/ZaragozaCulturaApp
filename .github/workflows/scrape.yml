@@ -2,20 +2,25 @@ name: "Daily Cultural Events Scraper"
 
 on:
     schedule:
-      - cron: '0 3 * * *' # Se ejecuta todos los días a las 03:00 UTC
+      - cron: '0 12 * * *' # Se ejecuta todos los días a las 12:00 UTC
     workflow_dispatch: {}
 
 jobs:
     scrape:
-      runs-on: ubuntu-latest
+      # zaragoza.es bloquea las IPs de los runners cloud de GitHub, así que
+      # esto se ejecuta en un runner "self-hosted" (el PC de Jesús), que usa
+      # una conexión residencial normal y no está bloqueado.
+      runs-on: self-hosted
       steps:
         - uses: actions/checkout@v4
         - uses: actions/setup-python@v5
           with:
             python-version: '3.12'
-        - run: |
+        - shell: bash
+          run: |
             pip install -r backend/requirements.txt
-            playwright install chromium --with-deps
-        - run: python backend/scraper/scraper.py
+            playwright install chromium
+        - shell: bash
+          run: python backend/scraper/scraper.py
           env:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
