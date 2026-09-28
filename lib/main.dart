@@ -444,8 +444,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: CustomScrollView(
-                slivers: [
+              child: RefreshIndicator(
+                onRefresh: _loadData,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
@@ -575,7 +578,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         }, childCount: filteredEvents.length),
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
     );
