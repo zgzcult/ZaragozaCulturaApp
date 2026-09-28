@@ -17,12 +17,10 @@ jobs:
         # Python falla en este PC (MSI error 1603 en el paquete "dev", causa
         # nunca resuelta). En su lugar usamos el Python ya instalado en el
         # sistema (C:\Program Files\Python312), instalado a mano una vez.
-        - shell: bash
-          run: |
+        - run: |
             python --version
             python -m pip install -r backend/requirements.txt
             python -m playwright install chromium
-        - shell: bash
-          run: python backend/scraper/scraper.py
+        - run: python backend/scraper/scraper.py
           env:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
