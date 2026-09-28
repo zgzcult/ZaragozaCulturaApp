@@ -1,9 +1,9 @@
-name: "Daily Cultural Events Scraper"
+name: "Weekly Cultural Events Scraper"
 
 on:
     schedule:
-      - cron: '0 12 * * *' # Se ejecuta todos los días a las 12:00 UTC
-    workflow_dispatch: {}
+      - cron: '0 12 * * 1' # Se ejecuta cada lunes a las 12:00 UTC
+    workflow_dispatch: {} # Tambien se puede lanzar a mano cuando quieras
 
 jobs:
     scrape:
