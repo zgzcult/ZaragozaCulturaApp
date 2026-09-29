@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'event_classifier.dart';
+
 const List<String> _eventsApiUrls = <String>[
   'https://zaragoza-cultura-app.onrender.com/events',
   'http://10.0.2.2:8000/events',
@@ -16,32 +18,6 @@ const String _fallbackAssetPath = 'assets/sample_events.json';
 
 void main() {
   runApp(const ZaragozaCulturaApp());
-}
-
-enum CulturalCategory { all, musica, teatro, gastronomia, eventos }
-
-CulturalCategory culturalCategoryFromString(String? value) {
-  final normalized = (value ?? '').trim().toLowerCase();
-
-  switch (normalized) {
-    case 'musica':
-    case 'música':
-      return CulturalCategory.musica;
-    case 'teatro':
-      return CulturalCategory.teatro;
-    case 'gastronomia':
-    case 'gastronomía':
-      return CulturalCategory.gastronomia;
-    case 'eventos':
-    case 'eventos culturales':
-    case 'exposiciones':
-    case 'conferencias':
-    case 'cine':
-    case 'infantil':
-      return CulturalCategory.eventos;
-    default:
-      return CulturalCategory.eventos;
-  }
 }
 
 String _isoDateKey(DateTime date) {
@@ -92,9 +68,20 @@ String _longDateLabel(DateTime date) {
   return '$weekday, ${date.day} de $month';
 }
 
+String _creditText(dynamic value) {
+  if (value is Map) {
+    final name = (value['photographer'] ?? '').toString();
+    return name.isEmpty ? '' : 'Foto: $name · Pexels';
+  }
+  return '';
+}
+
 String _absoluteImageUrl(String value) {
   if (value.startsWith('//')) {
     return 'https:$value';
+  }
+  if (value.startsWith('/')) {
+    return 'https://www.zaragoza.es$value';
   }
   return value;
 }
@@ -123,6 +110,16 @@ class CulturalEvent {
   final String endDate;
   final String endTime;
 
+  /// Imagen de reserva (banco de imágenes) y su autoría.
+  final String fallbackImageUrl;
+  final String imageCredit;
+
+  /// La imagen de la web se comparte entre actos sin relación entre sí.
+  final bool genericImage;
+
+  /// Franjas horarias del mismo acto en el mismo día (p. ej. mañana y tarde).
+  final List<String> timeSlots;
+
   const CulturalEvent({
     required this.id,
     required this.title,
@@ -137,6 +134,10 @@ class CulturalEvent {
     this.imageUrl = '',
     this.endDate = '',
     this.endTime = '',
+    this.fallbackImageUrl = '',
+    this.imageCredit = '',
+    this.genericImage = false,
+    this.timeSlots = const <String>[],
   });
 
   factory CulturalEvent.fromJson(Map<String, dynamic> json) {
@@ -144,7 +145,14 @@ class CulturalEvent {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? 'Evento').toString(),
       description: (json['description'] ?? '').toString(),
-      category: culturalCategoryFromString(json['category'] as String?),
+      category: classifyEvent(
+        title: (json['title'] ?? '').toString(),
+        place: (json['place'] ?? '').toString(),
+        description: (json['description'] ?? '').toString(),
+        sourceCategory: (json['category'] ?? '').toString(),
+        time: (json['time'] ?? '').toString(),
+        endTime: (json['endTime'] ?? '').toString(),
+      ),
       date: (json['date'] ?? _isoDateKey(DateTime.now())).toString(),
       time: (json['time'] ?? '').toString(),
       place: (json['place'] ?? '').toString(),
@@ -159,6 +167,33 @@ class CulturalEvent {
       imageUrl: _absoluteImageUrl((json['imageUrl'] ?? '').toString()),
       endDate: (json['endDate'] ?? '').toString(),
       endTime: (json['endTime'] ?? '').toString(),
+      fallbackImageUrl: _absoluteImageUrl(
+        (json['fallbackImageUrl'] ?? '').toString(),
+      ),
+      imageCredit: _creditText(json['imageCredit']),
+      genericImage: json['genericImage'] == true,
+    );
+  }
+
+  CulturalEvent withTimeSlots(List<String> slots) {
+    return CulturalEvent(
+      id: id,
+      title: title,
+      description: description,
+      category: category,
+      date: date,
+      time: time,
+      place: place,
+      address: address,
+      officialUrl: officialUrl,
+      moreInfoUrl: moreInfoUrl,
+      imageUrl: imageUrl,
+      endDate: endDate,
+      endTime: endTime,
+      fallbackImageUrl: fallbackImageUrl,
+      imageCredit: imageCredit,
+      genericImage: genericImage,
+      timeSlots: slots,
     );
   }
 
@@ -181,6 +216,38 @@ class CulturalEvent {
   }
 }
 
+String _timeSlotOf(CulturalEvent event) {
+  if (event.time.isEmpty) return '';
+  return event.endTime.isEmpty ? event.time : '${event.time}–${event.endTime}';
+}
+
+/// Junta las entradas repetidas del mismo acto en el mismo día y lugar
+/// (por ejemplo una exposición con horario de mañana y de tarde).
+List<CulturalEvent> _mergeSameDay(List<CulturalEvent> events) {
+  final merged = <String, CulturalEvent>{};
+  final slots = <String, Set<String>>{};
+  for (final event in events) {
+    final key = '${event.title}|${event.place}|${event.date}';
+    final slot = _timeSlotOf(event);
+    merged.putIfAbsent(key, () => event);
+    final set = slots.putIfAbsent(key, () => <String>{});
+    if (slot.isNotEmpty) set.add(slot);
+  }
+  return merged.entries.map((entry) {
+    final list = slots[entry.key]!.toList()..sort();
+    return entry.value.withTimeSlots(list);
+  }).toList();
+}
+
+/// Texto del horario para mostrar al usuario.
+String _eventTimeLabel(CulturalEvent event) {
+  if (event.timeSlots.isEmpty) return 'Horario por confirmar';
+  final text = event.timeSlots.join(' · ');
+  return event.category == CulturalCategory.exposiciones
+      ? 'Abierto $text'
+      : text;
+}
+
 List<CulturalEvent> _parseEventList(dynamic decoded) {
   final items = decoded is List
       ? decoded
@@ -190,12 +257,14 @@ List<CulturalEvent> _parseEventList(dynamic decoded) {
     return const <CulturalEvent>[];
   }
 
-  return items
-      .map(
-        (item) =>
-            CulturalEvent.fromJson(Map<String, dynamic>.from(item as Map)),
-      )
-      .toList();
+  return _mergeSameDay(
+    items
+        .map(
+          (item) =>
+              CulturalEvent.fromJson(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList(),
+  );
 }
 
 List<CulturalEvent> buildFallbackEvents() {
@@ -280,6 +349,9 @@ class ZaragozaEventsRepository {
             .get(Uri.parse(apiUrls[i]))
             .timeout(Duration(seconds: i == 0 ? 60 : 3));
 
+        debugPrint(
+          'EVENTS ${apiUrls[i]} -> HTTP ${response.statusCode}, ${response.bodyBytes.length} bytes',
+        );
         if (response.statusCode == 200) {
           final body = utf8.decode(response.bodyBytes);
           final parsed = _parseEventList(jsonDecode(body));
@@ -293,7 +365,9 @@ class ZaragozaEventsRepository {
             return parsed;
           }
         }
-      } catch (_) {}
+      } catch (error) {
+        debugPrint('EVENTS ${apiUrls[i]} ERROR: $error');
+      }
     }
     return null;
   }
@@ -871,34 +945,7 @@ class _EventCard extends StatelessWidget {
                 SizedBox(
                   height: 168,
                   width: double.infinity,
-                  child: event.imageUrl.isEmpty
-                      ? Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                _categoryColor(event.category),
-                                const Color(0xFF10243E),
-                              ],
-                            ),
-                          ),
-                          child: Icon(
-                            _categoryIcon(event.category),
-                            size: 64,
-                            color: Colors.white70,
-                          ),
-                        )
-                      : Image.network(
-                          event.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: _categoryColor(event.category),
-                            child: Icon(
-                              _categoryIcon(event.category),
-                              size: 64,
-                              color: Colors.white70,
-                            ),
-                          ),
-                        ),
+                  child: _EventImage(event: event),
                 ),
                 Positioned(
                   top: 12,
@@ -957,9 +1004,7 @@ class _EventCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _InfoRow(
                     icon: Icons.access_time_rounded,
-                    text: event.time.isEmpty
-                        ? 'Horario por confirmar'
-                        : event.time,
+                    text: _eventTimeLabel(event),
                   ),
                   const SizedBox(height: 7),
                   _InfoRow(
@@ -984,8 +1029,14 @@ IconData _categoryIcon(CulturalCategory category) {
       return Icons.music_note;
     case CulturalCategory.teatro:
       return Icons.theater_comedy;
+    case CulturalCategory.exposiciones:
+      return Icons.museum_outlined;
     case CulturalCategory.gastronomia:
       return Icons.restaurant;
+    case CulturalCategory.cine:
+      return Icons.movie_outlined;
+    case CulturalCategory.charlas:
+      return Icons.record_voice_over;
     case CulturalCategory.eventos:
       return Icons.event;
     case CulturalCategory.all:
@@ -1024,26 +1075,14 @@ class EventDetailScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (event.imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      event.imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: _categoryColor(event.category),
-                        child: Icon(
-                          _categoryIcon(event.category),
-                          size: 64,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ),
-                  ),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _EventImage(event: event, iconSize: 84),
                 ),
-              if (event.imageUrl.isNotEmpty) const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 16),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -1132,11 +1171,7 @@ class EventDetailScreen extends StatelessWidget {
                   children: [
                     _InfoRow(
                       icon: Icons.access_time_rounded,
-                      text: event.time.isEmpty
-                          ? 'Horario por confirmar'
-                          : event.endTime.isEmpty
-                          ? event.time
-                          : '${event.time} - ${event.endTime}',
+                      text: _eventTimeLabel(event),
                     ),
                     const SizedBox(height: 10),
                     _InfoRow(
@@ -1252,10 +1287,16 @@ String _categoryLabel(CulturalCategory category) {
       return 'Música';
     case CulturalCategory.teatro:
       return 'Teatro';
+    case CulturalCategory.exposiciones:
+      return 'Exposiciones';
     case CulturalCategory.gastronomia:
       return 'Gastronomía';
+    case CulturalCategory.cine:
+      return 'Cine';
+    case CulturalCategory.charlas:
+      return 'Charlas y talleres';
     case CulturalCategory.eventos:
-      return 'Eventos';
+      return 'Otros eventos';
   }
 }
 
@@ -1266,10 +1307,85 @@ Color _categoryColor(CulturalCategory category) {
     case CulturalCategory.musica:
       return const Color(0xFF7B5FBF);
     case CulturalCategory.teatro:
-      return const Color(0xFFED9B3A);
+      return const Color(0xFFD9822B);
+    case CulturalCategory.exposiciones:
+      return const Color(0xFFC2456B);
     case CulturalCategory.gastronomia:
       return const Color(0xFF43A66A);
+    case CulturalCategory.cine:
+      return const Color(0xFF3B5BDB);
+    case CulturalCategory.charlas:
+      return const Color(0xFF6C757D);
     case CulturalCategory.eventos:
       return const Color(0xFF1E5F74);
+  }
+}
+
+/// Imagen de la actividad. Si no hay imagen o no carga, se muestra una
+/// ilustración con el color y el icono de su categoría.
+class _EventImage extends StatefulWidget {
+  final CulturalEvent event;
+  final double iconSize;
+
+  const _EventImage({required this.event, this.iconSize = 64});
+
+  @override
+  State<_EventImage> createState() => _EventImageState();
+}
+
+class _EventImageState extends State<_EventImage> {
+  int _index = 0;
+
+  /// Orden de preferencia: imagen de la web de Zaragoza (si es propia del
+  /// acto), imagen del banco de imágenes y, al final, la ilustración.
+  List<String> get _candidates {
+    final event = widget.event;
+    return <String>[
+      if (event.imageUrl.isNotEmpty && !event.genericImage) event.imageUrl,
+      if (event.fallbackImageUrl.isNotEmpty) event.fallbackImageUrl,
+    ];
+  }
+
+  Widget _placeholder() {
+    final event = widget.event;
+    final color = _categoryColor(event.category);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color, Color.lerp(color, const Color(0xFF10243E), 0.65)!],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        _categoryIcon(event.category),
+        size: widget.iconSize,
+        color: Colors.white.withValues(alpha: 0.85),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = _candidates;
+    if (_index >= candidates.length) {
+      return _placeholder();
+    }
+    return Image.network(
+      candidates[_index],
+      key: ValueKey(candidates[_index]),
+      fit: BoxFit.cover,
+      width: double.infinity,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : _placeholder(),
+      errorBuilder: (_, _, _) {
+        // Si esta imagen falla, se prueba la siguiente en el siguiente frame.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _index++);
+        });
+        return _placeholder();
+      },
+    );
   }
 }

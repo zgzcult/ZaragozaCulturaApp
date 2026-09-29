@@ -24,3 +24,11 @@ jobs:
         - run: python backend/scraper/scraper.py
           env:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        # Busca imágenes de reserva (Groq + Pexels). Si faltan las claves o
+        # falla, no rompe el scraping: la app usa una ilustración por categoría.
+        - run: python backend/scraper/enrich_images.py
+          continue-on-error: true
+          env:
+            MONGODB_URI: ${{ secrets.MONGODB_URI }}
+            GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+            PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
