@@ -245,6 +245,9 @@ List<CulturalEvent> buildFallbackEvents() {
 }
 
 class ZaragozaEventsRepository {
+  static const String _cacheKey = 'cached_events_json';
+  static const String _cacheTimeKey = 'cached_events_time';
+
   final List<String> apiUrls;
   final String fallbackAssetPath;
 
@@ -253,27 +256,53 @@ class ZaragozaEventsRepository {
     this.fallbackAssetPath = _fallbackAssetPath,
   });
 
-  Future<List<CulturalEvent>> loadEvents() async {
-    for (final apiUrl in apiUrls) {
+  /// Eventos guardados en el teléfono en la última descarga correcta.
+  Future<List<CulturalEvent>> loadCached() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null) {
+        return const <CulturalEvent>[];
+      }
+      return _parseEventList(jsonDecode(raw));
+    } catch (_) {
+      return const <CulturalEvent>[];
+    }
+  }
+
+  /// Descarga eventos del servidor. Devuelve null si no se pudo.
+  /// El primer servidor (Render) puede tardar en despertar; el resto son
+  /// servidores locales de desarrollo y se descartan rápido.
+  Future<List<CulturalEvent>?> fetchFresh() async {
+    for (var i = 0; i < apiUrls.length; i++) {
       try {
         final response = await http
-            .get(Uri.parse(apiUrl))
-            .timeout(const Duration(seconds: 45));
+            .get(Uri.parse(apiUrls[i]))
+            .timeout(Duration(seconds: i == 0 ? 60 : 3));
 
         if (response.statusCode == 200) {
-          final decoded = jsonDecode(response.body);
-          final parsed = _parseEventList(decoded);
+          final body = utf8.decode(response.bodyBytes);
+          final parsed = _parseEventList(jsonDecode(body));
           if (parsed.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_cacheKey, body);
+            await prefs.setString(
+              _cacheTimeKey,
+              DateTime.now().toIso8601String(),
+            );
             return parsed;
           }
         }
       } catch (_) {}
     }
+    return null;
+  }
 
+  /// Datos de emergencia incluidos en la app.
+  Future<List<CulturalEvent>> loadFallback() async {
     try {
       final content = await rootBundle.loadString(fallbackAssetPath);
-      final decoded = jsonDecode(content);
-      final parsed = _parseEventList(decoded);
+      final parsed = _parseEventList(jsonDecode(content));
       if (parsed.isNotEmpty) {
         return parsed;
       }
@@ -354,6 +383,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
   bool favoritesOnly = false;
   List<CulturalEvent> _events = <CulturalEvent>[];
   bool _isLoading = true;
+  bool _isRefreshing = false;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -362,20 +393,58 @@ class _AgendaScreenState extends State<AgendaScreen> {
     _loadData();
   }
 
+  /// Muestra al instante lo guardado en el teléfono y actualiza en segundo
+  /// plano con lo último del servidor.
   Future<void> _loadData() async {
-    final events = await _repository.loadEvents();
-    final favorites = await _favoritesStorage.load();
+    if (_isRefreshing) {
+      return;
+    }
+    setState(() {
+      _isRefreshing = true;
+      _loadFailed = false;
+    });
 
+    final favorites = await _favoritesStorage.load();
+    final cached = await _repository.loadCached();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _favoriteEventIds
+        ..clear()
+        ..addAll(favorites);
+      if (cached.isNotEmpty) {
+        _events = cached;
+        _isLoading = false;
+      }
+    });
+
+    final fresh = await _repository.fetchFresh();
     if (!mounted) {
       return;
     }
 
+    if (fresh == null && _events.isEmpty) {
+      final fallback = await _repository.loadFallback();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _events = fallback;
+        _loadFailed = true;
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+      return;
+    }
+
     setState(() {
-      _events = events;
-      _favoriteEventIds
-        ..clear()
-        ..addAll(favorites);
+      if (fresh != null) {
+        _events = fresh;
+      }
+      _loadFailed = fresh == null;
       _isLoading = false;
+      _isRefreshing = false;
     });
   }
 
@@ -449,135 +518,183 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            favoritesOnly
-                                ? 'Tus favoritos'
-                                : 'Zaragoza Cultura',
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF10243E),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Zaragoza · ${_monthLabel(selectedDate)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Color(0xFF738196),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: _DateStripDelegate(
-                      dates: _calendarDays,
-                      selectedDate: selectedDate,
-                      onSelected: (date) => setState(() => selectedDate = date),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 58,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-                        scrollDirection: Axis.horizontal,
-                        itemCount: CulturalCategory.values.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) {
-                          final category = CulturalCategory.values[index];
-                          return ChoiceChip(
-                            label: Text(_categoryLabel(category)),
-                            selected: selectedCategory == category,
-                            onSelected: (_) =>
-                                setState(() => selectedCategory = category),
-                            selectedColor: const Color(0xFF2463D9),
-                            backgroundColor: Colors.white,
-                            labelStyle: TextStyle(
-                              color: selectedCategory == category
-                                  ? Colors.white
-                                  : const Color(0xFF1D2939),
-                              fontWeight: FontWeight.w700,
-                            ),
-                            side: const BorderSide(color: Color(0xFFE0E5EC)),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _longDateLabel(selectedDate),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              favoritesOnly
+                                  ? 'Tus favoritos'
+                                  : 'Zaragoza Cultura',
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 28,
                                 fontWeight: FontWeight.w800,
                                 color: Color(0xFF10243E),
                               ),
                             ),
-                          ),
-                          Text(
-                            '${filteredEvents.length} actividades',
-                            style: const TextStyle(
-                              color: Color(0xFF66758A),
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(height: 4),
+                            Text(
+                              'Zaragoza · ${_monthLabel(selectedDate)}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Color(0xFF738196),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (filteredEvents.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Text(
-                          'No hay actividades para este día.',
-                          style: TextStyle(color: Color(0xFF66758A)),
+                          ],
                         ),
                       ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final event = filteredEvents[index];
-                          final isFavorite = _favoriteEventIds.contains(
-                            event.id,
-                          );
-                          return _EventCard(
-                            event: event,
-                            isFavorite: isFavorite,
-                            onFavorite: () => toggleFavorite(event.id),
-                            onOpen: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EventDetailScreen(
-                                  event: event,
-                                  isFavorite: isFavorite,
-                                  onToggleFavorite: () =>
-                                      toggleFavorite(event.id),
+                    ),
+                    if (_isRefreshing || _loadFailed)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                          child: _isRefreshing
+                              ? const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    LinearProgressIndicator(minHeight: 3),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      'Actualizando actividades…',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF66758A),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.cloud_off,
+                                      size: 18,
+                                      color: Color(0xFF66758A),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'No se pudo actualizar. Mostrando datos guardados.',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF66758A),
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _loadData,
+                                      child: const Text('Reintentar'),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: _DateStripDelegate(
+                        dates: _calendarDays,
+                        selectedDate: selectedDate,
+                        onSelected: (date) =>
+                            setState(() => selectedDate = date),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 58,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                          scrollDirection: Axis.horizontal,
+                          itemCount: CulturalCategory.values.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final category = CulturalCategory.values[index];
+                            return ChoiceChip(
+                              label: Text(_categoryLabel(category)),
+                              selected: selectedCategory == category,
+                              onSelected: (_) =>
+                                  setState(() => selectedCategory = category),
+                              selectedColor: const Color(0xFF2463D9),
+                              backgroundColor: Colors.white,
+                              labelStyle: TextStyle(
+                                color: selectedCategory == category
+                                    ? Colors.white
+                                    : const Color(0xFF1D2939),
+                                fontWeight: FontWeight.w700,
+                              ),
+                              side: const BorderSide(color: Color(0xFFE0E5EC)),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _longDateLabel(selectedDate),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF10243E),
                                 ),
                               ),
                             ),
-                          );
-                        }, childCount: filteredEvents.length),
+                            Text(
+                              '${filteredEvents.length} actividades',
+                              style: const TextStyle(
+                                color: Color(0xFF66758A),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                    if (filteredEvents.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Text(
+                            'No hay actividades para este día.',
+                            style: TextStyle(color: Color(0xFF66758A)),
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final event = filteredEvents[index];
+                            final isFavorite = _favoriteEventIds.contains(
+                              event.id,
+                            );
+                            return _EventCard(
+                              event: event,
+                              isFavorite: isFavorite,
+                              onFavorite: () => toggleFavorite(event.id),
+                              onOpen: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => EventDetailScreen(
+                                    event: event,
+                                    isFavorite: isFavorite,
+                                    onToggleFavorite: () =>
+                                        toggleFavorite(event.id),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }, childCount: filteredEvents.length),
+                        ),
+                      ),
                   ],
                 ),
               ),
