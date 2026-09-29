@@ -36,7 +36,15 @@ from datetime import date, timedelta
 from typing import Any, Dict, List, Optional
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models"
+# Modelos de texto por orden de preferencia; se usa el primero que la clave
+# tenga disponible (GROQ_MODEL fuerza uno concreto).
+GROQ_MODEL_PREFERENCE = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+]
 PEXELS_URL = "https://api.pexels.com/v1/search"
 
 # Una imagen usada por este número de títulos distintos (o más) se considera
@@ -86,11 +94,27 @@ def http_json(url: str, headers: Dict[str, str], body: Optional[dict] = None, re
                 wait = int(exc.headers.get("Retry-After", "5") or 5)
                 time.sleep(min(wait, 30))
                 continue
-            raise
+            detail = exc.read().decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"HTTP {exc.code} en {url.split('?')[0]}: {detail}") from exc
     raise RuntimeError("sin respuesta")
 
 
-def groq_query(api_key: str, event: Dict[str, Any]) -> Optional[str]:
+def pick_groq_model(api_key: str) -> str:
+    forced = os.environ.get("GROQ_MODEL")
+    if forced:
+        return forced
+    result = http_json(
+        GROQ_MODELS_URL,
+        {"Authorization": f"Bearer {api_key}", "User-Agent": "zaragoza-cultura-app/1.0"},
+    )
+    available = {m.get("id") for m in result.get("data", [])}
+    for model in GROQ_MODEL_PREFERENCE:
+        if model in available:
+            return model
+    raise RuntimeError(f"Ningún modelo preferido disponible. Disponibles: {sorted(x for x in available if x)}")
+
+
+def groq_query(api_key: str, model: str, event: Dict[str, Any]) -> Optional[str]:
     description = (event.get("description") or "")[:300]
     user = (
         f"Título: {event.get('title', '')}\n"
@@ -106,10 +130,10 @@ def groq_query(api_key: str, event: Dict[str, Any]) -> Optional[str]:
             "User-Agent": "zaragoza-cultura-app/1.0",
         },
         {
-            "model": GROQ_MODEL,
+            "model": model,
             "temperature": 0.2,
-            "max_tokens": 60,
-            "response_format": {"type": "json_object"},
+            # margen para modelos que "razonan" antes de responder
+            "max_tokens": 400,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user},
@@ -117,9 +141,10 @@ def groq_query(api_key: str, event: Dict[str, Any]) -> Optional[str]:
         },
     )
     try:
-        content = result["choices"][0]["message"]["content"]
-        query = str(json.loads(content).get("query", "")).strip()
-    except (KeyError, IndexError, ValueError):
+        content = result["choices"][0]["message"]["content"] or ""
+        match = re.search(r"\{.*?\}", content, re.S)
+        query = str(json.loads(match.group(0)).get("query", "")).strip() if match else ""
+    except (KeyError, IndexError, ValueError, AttributeError):
         return None
     query = re.sub(r"[^A-Za-z0-9 \-]", "", query)[:60].strip()
     return query or None
@@ -212,12 +237,20 @@ def main() -> int:
     if not groq_key or not pexels_key:
         return 0
 
+    try:
+        model = pick_groq_model(groq_key)
+    except Exception as exc:
+        print(f"[ERROR] No se pudo elegir modelo de Groq: {exc}", file=sys.stderr)
+        return 0
+    print(f"[INFO] Modelo de Groq: {model}")
+
     cache = collection.database["image_cache"]
     resolved = 0
+    failures = 0
     for title, group in pending[: args.max_queries]:
         sample = group[0]
         try:
-            query = groq_query(groq_key, sample)
+            query = groq_query(groq_key, model, sample)
             if not query:
                 continue
             cached = cache.find_one({"_id": query})
@@ -238,7 +271,11 @@ def main() -> int:
             resolved += 1
             print(f"[OK] {sample.get('title', '')[:50]!r} -> {query!r}")
         except Exception as exc:  # una actividad no debe parar al resto
+            failures += 1
             print(f"[WARN] {sample.get('title', '')[:50]!r}: {exc}", file=sys.stderr)
+            if failures >= 5 and resolved == 0:
+                print("[ERROR] Demasiados fallos seguidos; se detiene para no gastar cupo.", file=sys.stderr)
+                break
 
     print(f"[OK] {resolved} títulos con imagen de reserva.")
     return 0
