@@ -405,11 +405,11 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
         current = max(start, today)
         while current.date() <= end.date() and len(output) < limit:
             openings = hours_by_day.get(current.weekday(), [])
-            if not openings:
-                duration_days = (end.date() - start.date()).days
-                include_as_all_day = duration_days in (0, 1) or current.date() >= today.date() and today.date() <= end.date()
-                if include_as_all_day:
-                    openings = [{"startTime": ""}]
+            if not openings and not hours_by_day:
+                # El acto no publica ningún horario: se muestra el día sin hora.
+                # Si publica horarios por días, los días sin sesión (p. ej. el
+                # lunes en un museo que cierra) NO son actividad ese día.
+                openings = [{"startTime": ""}]
             for opening in openings:
                 time_value = normalize_text(opening.get("startTime"))
                 event_date = current.strftime("%Y-%m-%d")
@@ -589,11 +589,58 @@ def save_to_mongodb(data: List[Dict[str, Any]]) -> None:
                 upsert=True
             )
         print(f"[OK] {len(data)} eventos sincronizados con MongoDB Atlas.")
+        remove_stale_events(collection, data)
+        remove_past_events(collection, data)
         client.close()
     except Exception as exc:
         print(f"[ERROR] Fallo al conectar con MongoDB: {exc}", file=sys.stderr)
         write_json(data, DEFAULT_OUTPUT)
         print(f"[WARN] Guardado en archivo local como fallback: {DEFAULT_OUTPUT}")
+
+def remove_stale_events(collection, data: List[Dict[str, Any]]) -> None:
+    """Borra actividades futuras que la fuente ya no publica.
+
+    Sin esto, un error corregido del scraper (o un acto cancelado) dejaría
+    para siempre las entradas antiguas en la base de datos. Salvaguardas: solo
+    toca actividades del Ayuntamiento con fecha de hoy en adelante, no actúa
+    si la extracción trajo pocos eventos y se detiene si borraría demasiado.
+    """
+    if len(data) < 1000:
+        print("[INFO] Limpieza omitida: la extracción trajo pocos eventos.")
+        return
+    today = datetime.now().strftime("%Y-%m-%d")
+    fresh_ids = {event["id"] for event in data}
+    query = {"source": "ayuntamiento", "date": {"$gte": today}}
+    existing = collection.count_documents(query)
+    stale_ids = [doc["id"] for doc in collection.find(query, {"id": 1, "_id": 0}) if doc["id"] not in fresh_ids]
+    if not stale_ids:
+        print("[OK] Limpieza: no hay entradas obsoletas.")
+        return
+    if existing and len(stale_ids) > 0.4 * existing:
+        print(f"[WARN] Limpieza cancelada: borraría {len(stale_ids)} de {existing} (demasiado).")
+        return
+    for i in range(0, len(stale_ids), 500):
+        collection.delete_many({"id": {"$in": stale_ids[i:i + 500]}})
+    print(f"[OK] Limpieza: {len(stale_ids)} entradas obsoletas eliminadas de {existing}.")
+
+
+PAST_EVENTS_KEEP_DAYS = 7
+
+
+def remove_past_events(collection, data: List[Dict[str, Any]]) -> None:
+    """Borra actividades del Ayuntamiento de hace más de una semana.
+
+    Mantiene la base de datos pequeña (el plan gratuito de Atlas es limitado).
+    Se conserva una semana de margen y no actúa si la extracción trajo pocos
+    eventos, por si la fuente hubiera fallado.
+    """
+    if len(data) < 1000:
+        print("[INFO] Purga de pasados omitida: la extracción trajo pocos eventos.")
+        return
+    limit = (datetime.now() - timedelta(days=PAST_EVENTS_KEEP_DAYS)).strftime("%Y-%m-%d")
+    result = collection.delete_many({"source": "ayuntamiento", "date": {"$lt": limit}})
+    print(f"[OK] Purga: {result.deleted_count} actividades anteriores a {limit} eliminadas.")
+
 
 def write_json(data: List[Dict[str, Any]], output_path: str) -> None:
     path = Path(output_path)

@@ -68,6 +68,18 @@ String _longDateLabel(DateTime date) {
   return '$weekday, ${date.day} de $month';
 }
 
+const String _sourceNotice =
+    'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura).';
+const String _ownWorkNotice =
+    'Las categorías y la agrupación de horarios son elaboración de esta '
+    'aplicación, que no es oficial.';
+
+String _updatedLabel(String isoDate) {
+  final date = DateTime.tryParse(isoDate);
+  if (date == null) return '';
+  return ' Actualizado el ${date.day}/${date.month}/${date.year}.';
+}
+
 String _creditText(dynamic value) {
   if (value is Map) {
     final name = (value['photographer'] ?? '').toString();
@@ -117,6 +129,9 @@ class CulturalEvent {
   /// La imagen de la web se comparte entre actos sin relación entre sí.
   final bool genericImage;
 
+  /// Fecha (AAAA-MM-DD) de la última actualización de los datos.
+  final String updatedAt;
+
   /// Franjas horarias del mismo acto en el mismo día (p. ej. mañana y tarde).
   final List<String> timeSlots;
 
@@ -137,6 +152,7 @@ class CulturalEvent {
     this.fallbackImageUrl = '',
     this.imageCredit = '',
     this.genericImage = false,
+    this.updatedAt = '',
     this.timeSlots = const <String>[],
   });
 
@@ -172,6 +188,7 @@ class CulturalEvent {
       ),
       imageCredit: _creditText(json['imageCredit']),
       genericImage: json['genericImage'] == true,
+      updatedAt: (json['lastUpdated'] ?? '').toString().split('T').first,
     );
   }
 
@@ -193,6 +210,7 @@ class CulturalEvent {
       fallbackImageUrl: fallbackImageUrl,
       imageCredit: imageCredit,
       genericImage: genericImage,
+      updatedAt: updatedAt,
       timeSlots: slots,
     );
   }
@@ -241,7 +259,7 @@ List<CulturalEvent> _mergeSameDay(List<CulturalEvent> events) {
 
 /// Texto del horario para mostrar al usuario.
 String _eventTimeLabel(CulturalEvent event) {
-  if (event.timeSlots.isEmpty) return 'Horario por confirmar';
+  if (event.timeSlots.isEmpty) return '';
   final text = event.timeSlots.join(' · ');
   return event.category == CulturalCategory.exposiciones
       ? 'Abierto $text'
@@ -564,6 +582,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
             setState(() => favoritesOnly = !favoritesOnly);
           } else if (index == 0 && favoritesOnly) {
             setState(() => favoritesOnly = false);
+          } else if (index == 3) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutScreen()),
+            );
           }
         },
         destinations: const [
@@ -769,6 +792,20 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           }, childCount: filteredEvents.length),
                         ),
                       ),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
+                        child: Text(
+                          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura). '
+                          'Aplicación no oficial.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF738196),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1002,11 +1039,13 @@ class _EventCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _InfoRow(
-                    icon: Icons.access_time_rounded,
-                    text: _eventTimeLabel(event),
-                  ),
-                  const SizedBox(height: 7),
+                  if (event.timeSlots.isNotEmpty) ...[
+                    _InfoRow(
+                      icon: Icons.access_time_rounded,
+                      text: _eventTimeLabel(event),
+                    ),
+                    const SizedBox(height: 7),
+                  ],
                   _InfoRow(
                     icon: Icons.location_on_outlined,
                     text: event.place.isEmpty
@@ -1082,6 +1121,17 @@ class EventDetailScreen extends StatelessWidget {
                   child: _EventImage(event: event, iconSize: 84),
                 ),
               ),
+              if (event.imageCredit.isNotEmpty &&
+                  (event.imageUrl.isEmpty || event.genericImage)) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${event.imageCredit} (imagen orientativa)',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF738196),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Container(
                 width: double.infinity,
@@ -1169,11 +1219,13 @@ class EventDetailScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _InfoRow(
-                      icon: Icons.access_time_rounded,
-                      text: _eventTimeLabel(event),
-                    ),
-                    const SizedBox(height: 10),
+                    if (event.timeSlots.isNotEmpty) ...[
+                      _InfoRow(
+                        icon: Icons.access_time_rounded,
+                        text: _eventTimeLabel(event),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     _InfoRow(
                       icon: Icons.location_on_rounded,
                       text: event.address.isEmpty
@@ -1246,6 +1298,16 @@ class EventDetailScreen extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '$_sourceNotice${_updatedLabel(event.updatedAt)} '
+                '$_ownWorkNotice',
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: Color(0xFF738196),
                 ),
               ),
             ],
@@ -1386,6 +1448,91 @@ class _EventImageState extends State<_EventImage> {
         });
         return _placeholder();
       },
+    );
+  }
+}
+
+/// Información legal y de origen de los datos.
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  static const String _legalUrl =
+      'https://www.zaragoza.es/sede/portal/aviso-legal';
+
+  Widget _section(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF10243E),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: Color(0xFF425B71),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Acerca de')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            _section(
+              'Aplicación no oficial',
+              'Zaragoza Cultura es una aplicación independiente. No está '
+                  'patrocinada ni respaldada por el Ayuntamiento de Zaragoza.',
+            ),
+            _section(
+              'Origen de los datos',
+              'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura) '
+                  '(agenda cultural de la sede electrónica). La información se '
+                  'actualiza periódicamente; cada actividad indica la fecha de '
+                  'su última actualización.',
+            ),
+            _section(
+              'Elaboración propia',
+              'Las categorías (música, teatro, exposiciones…) y la '
+                  'agrupación de horarios los calcula esta aplicación para '
+                  'facilitar la consulta, y pueden no coincidir con la '
+                  'clasificación oficial. Consulta siempre la ficha oficial '
+                  'antes de acudir.',
+            ),
+            _section(
+              'Imágenes',
+              'Las imágenes proceden de la web del Ayuntamiento y pertenecen '
+                  'a sus titulares. Cuando una actividad no tiene una imagen '
+                  'propia se muestra una foto orientativa de Pexels '
+                  '(pexels.com), con el nombre de su autor.',
+            ),
+            OutlinedButton.icon(
+              onPressed: () => launchUrl(
+                Uri.parse(_legalUrl),
+                mode: LaunchMode.externalApplication,
+              ),
+              icon: const Icon(Icons.gavel_outlined),
+              label: const Text('Aviso legal del Ayuntamiento'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
