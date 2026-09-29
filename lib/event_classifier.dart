@@ -29,6 +29,9 @@ String _normalize(String value) {
   return buffer.toString();
 }
 
+/// Minúsculas y sin tildes, para comparar textos (búsquedas y reglas).
+String normalizeForSearch(String value) => _normalize(value);
+
 bool _has(String text, RegExp pattern) => pattern.hasMatch(text);
 
 final RegExp _exposicion = RegExp(

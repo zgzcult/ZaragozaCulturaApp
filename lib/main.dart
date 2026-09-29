@@ -1,12 +1,16 @@
 import 'dart:convert';
 
+import 'package:add_2_calendar/add_2_calendar.dart' as calendar;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'ads.dart';
 import 'event_classifier.dart';
+import 'reminders.dart';
 
 const List<String> _eventsApiUrls = <String>[
   'https://zaragoza-cultura-app.onrender.com/events',
@@ -67,6 +71,24 @@ String _longDateLabel(DateTime date) {
   ][date.month - 1];
   return '$weekday, ${date.day} de $month';
 }
+
+/// Enlace estable para descargar la app. Lo sirve el backend y hoy muestra
+/// una página de "próximamente"; al publicar redirigirá a la tienda.
+const String _appShareUrl = 'https://zaragoza-cultura-app.onrender.com/app';
+
+/// Política de privacidad (la sirve el propio backend).
+const String _privacyUrl =
+    'https://zaragoza-cultura-app.onrender.com/privacidad';
+
+/// Identificador de la app en Google Play. Actualizar si se cambia el
+/// applicationId de Android antes de publicar.
+const String _androidAppId = 'com.example.zaragoza_cultura_app';
+
+const String _remindersKey = 'reminders_enabled';
+
+/// Formulario (Google Forms) donde los usuarios envían sus eventos.
+const String _submitEventUrl =
+    'https://docs.google.com/forms/d/e/1FAIpQLSdJBr0cO7DEm5b1ih6yOCCo0Lv6SjHPR1bQXYavyiNpKq0Zkg/viewform';
 
 const String _sourceNotice =
     'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura).';
@@ -257,6 +279,148 @@ List<CulturalEvent> _mergeSameDay(List<CulturalEvent> events) {
   }).toList();
 }
 
+/// Una actividad encontrada por la búsqueda: su fecha más próxima y cuántas
+/// fechas más tiene.
+class SearchResult {
+  final CulturalEvent event;
+  final int otherDates;
+
+  const SearchResult({required this.event, required this.otherDates});
+}
+
+class _SearchText {
+  final String title;
+  final String near;
+  final String all;
+
+  const _SearchText(this.title, this.near, this.all);
+}
+
+final Expando<_SearchText> _searchTextCache = Expando<_SearchText>();
+
+_SearchText _searchTextOf(CulturalEvent event) {
+  return _searchTextCache[event] ??= () {
+    final title = normalizeForSearch(event.title);
+    final near =
+        '$title ${normalizeForSearch(event.place)} '
+        '${normalizeForSearch(_categoryLabel(event.category))}';
+    final description = event.description.length > 600
+        ? event.description.substring(0, 600)
+        : event.description;
+    return _SearchText(title, near, '$near ${normalizeForSearch(description)}');
+  }();
+}
+
+/// Busca actividades que contengan todas las palabras de [query] (sin
+/// distinguir mayúsculas ni tildes) en el título, el lugar, la categoría o la
+/// descripción. Una actividad con muchas fechas aparece una sola vez, con su
+/// fecha más próxima desde [today]. Primero salen las que coinciden en el
+/// título.
+List<SearchResult> searchEvents(
+  List<CulturalEvent> events,
+  String query, {
+  required DateTime today,
+}) {
+  final terms = normalizeForSearch(query)
+      .split(RegExp(r'\s+'))
+      .where((term) => term.isNotEmpty)
+      .toList();
+  if (terms.isEmpty) return const <SearchResult>[];
+
+  final todayKey = _isoDateKey(today);
+  final groups = <String, List<CulturalEvent>>{};
+  for (final event in events) {
+    if (event.date.compareTo(todayKey) < 0) continue;
+    final key =
+        '${normalizeForSearch(event.title)}|'
+        '${normalizeForSearch(event.place)}';
+    groups.putIfAbsent(key, () => <CulturalEvent>[]).add(event);
+  }
+
+  final scored = <({int score, SearchResult result})>[];
+  for (final group in groups.values) {
+    group.sort((a, b) => a.date.compareTo(b.date));
+    final first = group.first;
+    final text = _searchTextOf(first);
+    final int score;
+    if (terms.every(text.title.contains)) {
+      score = 0;
+    } else if (terms.every(text.near.contains)) {
+      score = 1;
+    } else if (terms.every(text.all.contains)) {
+      score = 2;
+    } else {
+      continue;
+    }
+    final dates = group.map((event) => event.date).toSet();
+    scored.add((
+      score: score,
+      result: SearchResult(event: first, otherDates: dates.length - 1),
+    ));
+  }
+
+  scored.sort((a, b) {
+    final byScore = a.score.compareTo(b.score);
+    if (byScore != 0) return byScore;
+    final byDate = a.result.event.date.compareTo(b.result.event.date);
+    return byDate != 0
+        ? byDate
+        : a.result.event.title.compareTo(b.result.event.title);
+  });
+  return [for (final item in scored) item.result];
+}
+
+/// Texto para compartir una actividad (mensajería, redes...).
+String buildShareText(CulturalEvent event) {
+  final date = DateTime.tryParse(event.date);
+  final time = _eventTimeLabel(event);
+  return [
+    event.title,
+    if (date != null) _longDateLabel(date),
+    if (time.isNotEmpty) time,
+    if (event.place.isNotEmpty) event.place,
+    '',
+    // Primero el enlace a la app: es el primero que las apps de mensajería
+    // usan para la vista previa.
+    'Descubre más actividades en Zaragoza Cultura: $_appShareUrl',
+    '',
+    'Más información oficial: ${event.officialUrl}',
+  ].join('\n');
+}
+
+/// Comienzo y fin de una actividad para el calendario. Usa la primera franja
+/// horaria; si no hay horario, será un evento de todo el día.
+({DateTime start, DateTime end, bool allDay}) calendarWindowFor(
+  CulturalEvent event,
+) {
+  final day = DateTime.tryParse(event.date) ?? DateTime.now();
+  final base = DateTime(day.year, day.month, day.day);
+  final slot = event.timeSlots.isEmpty ? '' : event.timeSlots.first;
+  final match = RegExp(r'^(\d{1,2}):(\d{2})(?:\s*[–-]\s*(\d{1,2}):(\d{2}))?')
+      .firstMatch(slot);
+  if (match == null) {
+    return (start: base, end: base.add(const Duration(days: 1)), allDay: true);
+  }
+  final start = base.add(
+    Duration(
+      hours: int.parse(match.group(1)!),
+      minutes: int.parse(match.group(2)!),
+    ),
+  );
+  var end = match.group(3) == null
+      ? start.add(const Duration(hours: 1))
+      : base.add(
+          Duration(
+            hours: int.parse(match.group(3)!),
+            minutes: int.parse(match.group(4)!),
+          ),
+        );
+  if (!end.isAfter(start)) {
+    end = start.add(const Duration(hours: 1));
+  }
+  return (start: start, end: end, allDay: false);
+}
+
 /// Texto del horario para mostrar al usuario.
 String _eventTimeLabel(CulturalEvent event) {
   if (event.timeSlots.isEmpty) return '';
@@ -295,6 +459,7 @@ List<CulturalEvent> buildFallbackEvents() {
       category: CulturalCategory.musica,
       date: _isoDateKey(today),
       time: '20:30',
+      timeSlots: const ['20:30'],
       place: 'Patio de la Infanta',
       officialUrl: 'https://www.zaragoza.es',
     ),
@@ -305,6 +470,7 @@ List<CulturalEvent> buildFallbackEvents() {
       category: CulturalCategory.teatro,
       date: _isoDateKey(today.add(const Duration(days: 1))),
       time: '19:00',
+      timeSlots: const ['19:00'],
       place: 'Teatro Principal',
       officialUrl: 'https://www.zaragoza.es',
     ),
@@ -315,6 +481,7 @@ List<CulturalEvent> buildFallbackEvents() {
       category: CulturalCategory.gastronomia,
       date: _isoDateKey(today.add(const Duration(days: 2))),
       time: '18:30',
+      timeSlots: const ['18:30'],
       place: 'Centro de Zaragoza',
       officialUrl: 'https://www.zaragoza.es',
     ),
@@ -325,6 +492,7 @@ List<CulturalEvent> buildFallbackEvents() {
       category: CulturalCategory.eventos,
       date: _isoDateKey(today.add(const Duration(days: 3))),
       time: '11:00',
+      timeSlots: const ['11:00'],
       place: 'Plaza del Pilar',
       officialUrl: 'https://www.zaragoza.es',
     ),
@@ -420,7 +588,12 @@ class FavoritesStorage {
 }
 
 class ZaragozaCulturaApp extends StatelessWidget {
-  const ZaragozaCulturaApp({super.key});
+  final ZaragozaEventsRepository repository;
+
+  const ZaragozaCulturaApp({
+    super.key,
+    this.repository = const ZaragozaEventsRepository(),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -448,20 +621,25 @@ class ZaragozaCulturaApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const AgendaScreen(),
+      home: AgendaScreen(repository: repository),
     );
   }
 }
 
 class AgendaScreen extends StatefulWidget {
-  const AgendaScreen({super.key});
+  final ZaragozaEventsRepository repository;
+
+  const AgendaScreen({
+    super.key,
+    this.repository = const ZaragozaEventsRepository(),
+  });
 
   @override
   State<AgendaScreen> createState() => _AgendaScreenState();
 }
 
 class _AgendaScreenState extends State<AgendaScreen> {
-  final ZaragozaEventsRepository _repository = const ZaragozaEventsRepository();
+  ZaragozaEventsRepository get _repository => widget.repository;
   final FavoritesStorage _favoritesStorage = FavoritesStorage();
   final Set<String> _favoriteEventIds = <String>{};
 
@@ -477,6 +655,159 @@ class _AgendaScreenState extends State<AgendaScreen> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _loadFailed = false;
+  bool _remindersEnabled = false;
+  final ReminderService _reminderService = ReminderService();
+
+  bool searchMode = false;
+  String _query = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Pantalla de búsqueda: una actividad, una vez, con su fecha más próxima.
+  Widget _buildSearchBody() {
+    final results = searchEvents(_events, _query, today: DateTime.now());
+    final hasQuery = _query.trim().isNotEmpty;
+
+    Widget message(String text) => Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Color(0xFF66758A), height: 1.4),
+        ),
+      ),
+    );
+
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 22, 20, 12),
+            child: Text(
+              'Buscar',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF10243E),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Nombre, lugar o categoría',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: hasQuery
+                    ? IconButton(
+                        tooltip: 'Borrar',
+                        icon: const Icon(Icons.close),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: !hasQuery
+                ? message(
+                    'Escribe lo que buscas: un nombre, un lugar o una '
+                    'categoría (por ejemplo «jazz» o «Museo de Goya»).',
+                  )
+                : results.isEmpty
+                ? message('No hay actividades que coincidan con «$_query».')
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    itemCount: results.length,
+                    itemBuilder: (context, index) {
+                      final result = results[index];
+                      final extra = result.otherDates == 0
+                          ? ''
+                          : result.otherDates == 1
+                          ? ' · y 1 fecha más'
+                          : ' · y ${result.otherDates} fechas más';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 8),
+                            child: Text(
+                              'Próxima fecha: ${_dayHeader(result.event.date)}$extra',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E5F74),
+                              ),
+                            ),
+                          ),
+                          _eventCard(result.event),
+                        ],
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Reprograma los avisos con los favoritos actuales (si están activados).
+  Future<void> _syncReminders() async {
+    if (!_remindersEnabled) return;
+    final candidates = _events
+        .where((e) => _favoriteEventIds.contains(e.id))
+        .map(
+          (e) => ReminderCandidate(
+            title: e.title,
+            date: e.date,
+            timeLabel: _eventTimeLabel(e),
+            place: e.place,
+          ),
+        )
+        .toList();
+    await _reminderService.sync(planReminders(candidates, now: DateTime.now()));
+  }
+
+  /// Activa o desactiva los avisos. Devuelve si el cambio se pudo hacer
+  /// (al activar hace falta el permiso de notificaciones).
+  Future<bool> _setReminders(bool enabled) async {
+    if (enabled && !await _reminderService.requestPermission()) {
+      return false;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_remindersKey, enabled);
+    _remindersEnabled = enabled;
+    if (enabled) {
+      await _syncReminders();
+    } else {
+      await _reminderService.cancelAll();
+    }
+    return true;
+  }
 
   @override
   void initState() {
@@ -498,6 +829,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
     final favorites = await _favoritesStorage.load();
     final cached = await _repository.loadCached();
+    final prefs = await SharedPreferences.getInstance();
+    _remindersEnabled = prefs.getBool(_remindersKey) ?? false;
     if (!mounted) {
       return;
     }
@@ -538,6 +871,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
       _isLoading = false;
       _isRefreshing = false;
     });
+    await _syncReminders();
   }
 
   List<CulturalEvent> get filteredEvents {
@@ -569,6 +903,126 @@ class _AgendaScreenState extends State<AgendaScreen> {
     });
 
     await _favoritesStorage.save(_favoriteEventIds);
+    await _syncReminders();
+  }
+
+  Widget _eventCard(CulturalEvent event) {
+    final isFavorite = _favoriteEventIds.contains(event.id);
+    return _EventCard(
+      event: event,
+      isFavorite: isFavorite,
+      onFavorite: () => toggleFavorite(event.id),
+      onOpen: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EventDetailScreen(
+            event: event,
+            isFavorite: isFavorite,
+            onToggleFavorite: () => toggleFavorite(event.id),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _dayHeader(String isoDate) {
+    final date = DateTime.tryParse(isoDate);
+    if (date == null) return isoDate;
+    final today = DateTime.now();
+    final diff = DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).difference(DateTime(today.year, today.month, today.day)).inDays;
+    final label = _longDateLabel(date);
+    if (diff == 0) return 'Hoy · $label';
+    if (diff == 1) return 'Mañana · $label';
+    return label;
+  }
+
+  /// Todos los favoritos desde hoy, agrupados por día y ordenados del más
+  /// próximo al más lejano.
+  List<Widget> _favoriteSlivers() {
+    final todayKey = _isoDateKey(DateTime.now());
+    String firstSlot(CulturalEvent e) =>
+        e.timeSlots.isEmpty ? '' : e.timeSlots.first;
+    final favorites =
+        _events
+            .where(
+              (e) =>
+                  _favoriteEventIds.contains(e.id) &&
+                  e.date.compareTo(todayKey) >= 0,
+            )
+            .toList()
+          ..sort((a, b) {
+            final byDate = a.date.compareTo(b.date);
+            return byDate != 0 ? byDate : firstSlot(a).compareTo(firstSlot(b));
+          });
+
+    if (favorites.isEmpty) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.favorite_border,
+                    size: 48,
+                    color: Color(0xFF9AA8B8),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Aún no tienes favoritos.\n'
+                    'Pulsa el corazón de una actividad para guardarla aquí.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF66758A), height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final items = <Object>[];
+    String? lastDate;
+    for (final event in favorites) {
+      if (event.date != lastDate) {
+        items.add(event.date);
+        lastDate = event.date;
+      }
+      items.add(event);
+    }
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        sliver: SliverList(
+          delegate: SliverChildBuilderDelegate((context, index) {
+            final item = items[index];
+            if (item is String) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 14, bottom: 10),
+                child: Text(
+                  _dayHeader(item),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF10243E),
+                  ),
+                ),
+              );
+            }
+            return _eventCard(item as CulturalEvent);
+          }, childCount: items.length),
+        ),
+      ),
+    ];
   }
 
   @override
@@ -576,16 +1030,32 @@ class _AgendaScreenState extends State<AgendaScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFD),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: favoritesOnly ? 2 : 0,
+        selectedIndex: searchMode ? 1 : (favoritesOnly ? 2 : 0),
         onDestinationSelected: (index) {
-          if (index == 2) {
-            setState(() => favoritesOnly = !favoritesOnly);
-          } else if (index == 0 && favoritesOnly) {
-            setState(() => favoritesOnly = false);
+          if (index == 0) {
+            setState(() {
+              favoritesOnly = false;
+              searchMode = false;
+            });
+          } else if (index == 1) {
+            setState(() {
+              favoritesOnly = false;
+              searchMode = true;
+            });
+          } else if (index == 2) {
+            setState(() {
+              favoritesOnly = !favoritesOnly || searchMode;
+              searchMode = false;
+            });
           } else if (index == 3) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AboutScreen()),
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(
+                  remindersEnabled: _remindersEnabled,
+                  onRemindersChanged: _setReminders,
+                ),
+              ),
             );
           }
         },
@@ -609,6 +1079,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : searchMode
+          ? _buildSearchBody()
           : SafeArea(
               child: RefreshIndicator(
                 onRefresh: _loadData,
@@ -633,7 +1105,9 @@ class _AgendaScreenState extends State<AgendaScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Zaragoza · ${_monthLabel(selectedDate)}',
+                              favoritesOnly
+                                  ? 'Ordenados por fecha, del más próximo al más lejano'
+                                  : 'Zaragoza · ${_monthLabel(selectedDate)}',
                               style: const TextStyle(
                                 fontSize: 16,
                                 color: Color(0xFF738196),
@@ -687,111 +1161,122 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                 ),
                         ),
                       ),
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _DateStripDelegate(
-                        dates: _calendarDays,
-                        selectedDate: selectedDate,
-                        onSelected: (date) =>
-                            setState(() => selectedDate = date),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height: 58,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-                          scrollDirection: Axis.horizontal,
-                          itemCount: CulturalCategory.values.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final category = CulturalCategory.values[index];
-                            return ChoiceChip(
-                              label: Text(_categoryLabel(category)),
-                              selected: selectedCategory == category,
-                              onSelected: (_) =>
-                                  setState(() => selectedCategory = category),
-                              selectedColor: const Color(0xFF2463D9),
-                              backgroundColor: Colors.white,
-                              labelStyle: TextStyle(
-                                color: selectedCategory == category
-                                    ? Colors.white
-                                    : const Color(0xFF1D2939),
-                                fontWeight: FontWeight.w700,
-                              ),
-                              side: const BorderSide(color: Color(0xFFE0E5EC)),
-                            );
-                          },
+                    if (favoritesOnly)
+                      ..._favoriteSlivers()
+                    else ...[
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _DateStripDelegate(
+                          dates: _calendarDays,
+                          selectedDate: selectedDate,
+                          onSelected: (date) =>
+                              setState(() => selectedDate = date),
                         ),
                       ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _longDateLabel(selectedDate),
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF10243E),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 58,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: CulturalCategory.values.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (context, index) {
+                              final category = CulturalCategory.values[index];
+                              return ChoiceChip(
+                                label: Text(_categoryLabel(category)),
+                                selected: selectedCategory == category,
+                                onSelected: (_) =>
+                                    setState(() => selectedCategory = category),
+                                selectedColor: const Color(0xFF2463D9),
+                                backgroundColor: Colors.white,
+                                labelStyle: TextStyle(
+                                  color: selectedCategory == category
+                                      ? Colors.white
+                                      : const Color(0xFF1D2939),
+                                  fontWeight: FontWeight.w700,
                                 ),
-                              ),
-                            ),
-                            Text(
-                              '${filteredEvents.length} actividades',
-                              style: const TextStyle(
-                                color: Color(0xFF66758A),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (filteredEvents.isEmpty)
-                      const SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: Text(
-                            'No hay actividades para este día.',
-                            style: TextStyle(color: Color(0xFF66758A)),
+                                side: const BorderSide(
+                                  color: Color(0xFFE0E5EC),
+                                ),
+                              );
+                            },
                           ),
                         ),
-                      )
-                    else
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate((
-                            context,
-                            index,
-                          ) {
-                            final event = filteredEvents[index];
-                            final isFavorite = _favoriteEventIds.contains(
-                              event.id,
-                            );
-                            return _EventCard(
-                              event: event,
-                              isFavorite: isFavorite,
-                              onFavorite: () => toggleFavorite(event.id),
-                              onOpen: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => EventDetailScreen(
-                                    event: event,
-                                    isFavorite: isFavorite,
-                                    onToggleFavorite: () =>
-                                        toggleFavorite(event.id),
+                      ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _longDateLabel(selectedDate),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF10243E),
                                   ),
                                 ),
                               ),
-                            );
-                          }, childCount: filteredEvents.length),
+                              Text(
+                                '${filteredEvents.length} actividades',
+                                style: const TextStyle(
+                                  color: Color(0xFF66758A),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                      if (filteredEvents.isEmpty)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Text(
+                              'No hay actividades para este día.',
+                              style: TextStyle(color: Color(0xFF66758A)),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              if (isAdIndex(index)) {
+                                return const AdSlot();
+                              }
+                              final event =
+                                  filteredEvents[eventIndexFor(index)];
+                              final isFavorite = _favoriteEventIds.contains(
+                                event.id,
+                              );
+                              return _EventCard(
+                                event: event,
+                                isFavorite: isFavorite,
+                                onFavorite: () => toggleFavorite(event.id),
+                                onOpen: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => EventDetailScreen(
+                                      event: event,
+                                      isFavorite: isFavorite,
+                                      onToggleFavorite: () =>
+                                          toggleFavorite(event.id),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }, childCount: withAds(filteredEvents.length)),
+                          ),
+                        ),
+                    ],
                     const SliverToBoxAdapter(
                       child: Padding(
                         padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -1083,7 +1568,7 @@ IconData _categoryIcon(CulturalCategory category) {
   }
 }
 
-class EventDetailScreen extends StatelessWidget {
+class EventDetailScreen extends StatefulWidget {
   final CulturalEvent event;
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
@@ -1094,6 +1579,56 @@ class EventDetailScreen extends StatelessWidget {
     required this.isFavorite,
     required this.onToggleFavorite,
   });
+
+  @override
+  State<EventDetailScreen> createState() => _EventDetailScreenState();
+}
+
+class _EventDetailScreenState extends State<EventDetailScreen> {
+  late bool isFavorite = widget.isFavorite;
+
+  CulturalEvent get event => widget.event;
+
+  void onToggleFavorite() {
+    widget.onToggleFavorite();
+    setState(() => isFavorite = !isFavorite);
+  }
+
+  Future<void> _share() async {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: buildShareText(event), subject: event.title),
+      );
+    } catch (_) {
+      _notify('No se pudo abrir el menú de compartir.');
+    }
+  }
+
+  Future<void> _addToCalendar() async {
+    final window = calendarWindowFor(event);
+    final address = event.address.isEmpty ? '' : ', ${event.address}';
+    try {
+      final added = await calendar.Add2Calendar.addEvent2Cal(
+        calendar.Event(
+          title: event.title,
+          description: 'Más información: ${event.officialUrl}',
+          location: '${event.place}$address',
+          startDate: window.start,
+          endDate: window.end,
+          allDay: window.allDay,
+        ),
+      );
+      if (!added) _notify('No se pudo abrir el calendario.');
+    } catch (_) {
+      _notify('No se pudo abrir el calendario.');
+    }
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
 
   Future<void> _openMoreInfo() async {
     final targetUrl = event.moreInfoUrl.isEmpty
@@ -1272,6 +1807,42 @@ class EventDetailScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _share,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF1E5F74),
+                        side: const BorderSide(color: Color(0xFFB9D3E2)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.share_outlined),
+                      label: const Text('Compartir'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _addToCalendar,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF1E5F74),
+                        side: const BorderSide(color: Color(0xFFB9D3E2)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.event_available_outlined),
+                      label: const Text('Calendario'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -1529,6 +2100,196 @@ class AboutScreen extends StatelessWidget {
               ),
               icon: const Icon(Icons.gavel_outlined),
               label: const Text('Aviso legal del Ayuntamiento'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ajustes: envío de eventos e información legal.
+class SettingsScreen extends StatefulWidget {
+  final bool remindersEnabled;
+
+  /// Activa/desactiva los avisos. Devuelve si se pudo (p. ej. si el usuario
+  /// concedió el permiso de notificaciones).
+  final Future<bool> Function(bool enabled) onRemindersChanged;
+
+  const SettingsScreen({
+    super.key,
+    required this.remindersEnabled,
+    required this.onRemindersChanged,
+  });
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  late bool _reminders = widget.remindersEnabled;
+
+  Future<void> _toggleReminders(bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final done = await widget.onRemindersChanged(value);
+    if (!mounted) return;
+    if (done) {
+      setState(() => _reminders = value);
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Para recibir avisos, permite las notificaciones de la app en los ajustes del teléfono.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openUrl(String url, String errorMessage) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!opened) {
+      messenger.showSnackBar(SnackBar(content: Text(errorMessage)));
+    }
+  }
+
+  Future<void> _rateApp() async {
+    final messenger = ScaffoldMessenger.of(context);
+    for (final url in <String>[
+      'market://details?id=$_androidAppId',
+      'https://play.google.com/store/apps/details?id=$_androidAppId',
+    ]) {
+      try {
+        if (await launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication,
+        )) {
+          return;
+        }
+      } catch (_) {}
+    }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('No se pudo abrir la tienda de aplicaciones.'),
+      ),
+    );
+  }
+
+  Future<void> _sendEvent(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(_submitEventUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el formulario.')),
+      );
+    }
+  }
+
+  Widget _tile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE4ECF4)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        leading: Icon(icon, color: const Color(0xFF1E5F74)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFD),
+      appBar: AppBar(title: const Text('Ajustes')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            _tile(
+              icon: Icons.event_available_outlined,
+              title: 'Envía tu evento',
+              subtitle:
+                  '¿Organizas algo? Rellena el formulario y lo revisaremos.',
+              onTap: () => _sendEvent(context),
+            ),
+            Card(
+              elevation: 0,
+              color: Colors.white,
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Color(0xFFE4ECF4)),
+              ),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                secondary: const Icon(
+                  Icons.notifications_active_outlined,
+                  color: Color(0xFF1E5F74),
+                ),
+                title: const Text(
+                  'Avisos de mis favoritos',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text(
+                  'Te avisamos la tarde anterior (18:00) de cada actividad que hayas guardado.',
+                ),
+                value: _reminders,
+                onChanged: _toggleReminders,
+              ),
+            ),
+            _tile(
+              icon: Icons.star_outline,
+              title: 'Valorar la app',
+              subtitle: 'Cuéntanos qué te parece en la tienda de aplicaciones.',
+              onTap: _rateApp,
+            ),
+            _tile(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Política de privacidad',
+              subtitle: 'Qué datos usa la aplicación y con quién se conecta.',
+              onTap: () => _openUrl(
+                _privacyUrl,
+                'No se pudo abrir la política de privacidad.',
+              ),
+            ),
+            _tile(
+              icon: Icons.info_outline,
+              title: 'Acerca de y aviso legal',
+              subtitle: 'Origen de los datos, imágenes y condiciones.',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutScreen()),
+              ),
             ),
           ],
         ),

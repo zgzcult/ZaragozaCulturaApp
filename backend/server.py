@@ -10,6 +10,7 @@ Flujo:
 from __future__ import annotations
 
 import gzip
+import html
 import json
 import os
 import sys
@@ -59,6 +60,52 @@ def get_payload(days):
     return payload
 
 
+APP_LANDING_PAGE = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zaragoza Cultura · La agenda cultural de Zaragoza</title>
+<meta property="og:title" content="Zaragoza Cultura">
+<meta property="og:description" content="Todas las actividades culturales de Zaragoza en una app: música, teatro, exposiciones y más.">
+<meta property="og:type" content="website">
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #10243e; background: #f8fafd; margin: 0; display: flex; min-height: 100vh; align-items: center; justify-content: center; }
+  main { max-width: 480px; padding: 32px 24px; text-align: center; line-height: 1.5; }
+  h1 { margin-bottom: .3rem; }
+  p { color: #425b71; }
+</style>
+</head>
+<body>
+<main>
+<h1>Zaragoza Cultura</h1>
+<p>Todas las actividades culturales de Zaragoza en una app: música, teatro, exposiciones y mucho más.</p>
+<p><strong>Muy pronto disponible.</strong></p>
+</main>
+</body>
+</html>
+"""
+
+PRIVACY_TEMPLATE = Path(__file__).with_name("privacy.html")
+PRIVACY_DATE = "29 de septiembre de 2026"
+
+
+def render_privacy_page() -> str:
+    """Política de privacidad. Los datos del responsable se leen del entorno
+    (PRIVACY_CONTROLLER y PRIVACY_CONTACT en Render) para no guardarlos en el
+    repositorio."""
+    pending = "[pendiente de completar]"
+    values = {
+        "{{RESPONSABLE}}": os.environ.get("PRIVACY_CONTROLLER", pending),
+        "{{CONTACTO}}": os.environ.get("PRIVACY_CONTACT", pending),
+        "{{FECHA}}": PRIVACY_DATE,
+    }
+    page = PRIVACY_TEMPLATE.read_text(encoding="utf-8")
+    for marker, value in values.items():
+        page = page.replace(marker, html.escape(value))
+    return page
+
+
 class EventHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if urlparse(self.path).path in ("/", "/index", "/index.html"):
@@ -71,6 +118,32 @@ class EventHandler(BaseHTTPRequestHandler):
             return
 
         url = urlparse(self.path)
+        if url.path == "/app":
+            # Enlace estable para compartir la app. Cuando esté publicada, basta
+            # con definir APP_STORE_URL en Render para redirigir a la tienda.
+            store_url = os.environ.get("APP_STORE_URL", "").strip()
+            if store_url.startswith("https://"):
+                self.send_response(302)
+                self.send_header("Location", store_url)
+                self.end_headers()
+                return
+            page = APP_LANDING_PAGE.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+            return
+
+        if url.path in ("/privacidad", "/privacy"):
+            page = render_privacy_page().encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+            return
+
         if url.path in ("/events", "/events.json"):
             try:
                 params = parse_qs(url.query)
