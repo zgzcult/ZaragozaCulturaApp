@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import re
+import ssl
 import sys
 import time
 import urllib.error
@@ -82,12 +83,29 @@ def find_generic_images(events: List[Dict[str, Any]]) -> set:
     return {img for img, titles in titles_by_image.items() if len(titles) >= GENERIC_MIN_TITLES}
 
 
+def _ssl_context() -> ssl.SSLContext:
+    """Usa los certificados de `certifi` (actualizados) si están instalados.
+
+    El Python del PC puede traer certificados raíz antiguos y caducados, y
+    entonces rechaza servidores válidos ("certificate has expired").
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def http_json(url: str, headers: Dict[str, str], body: Optional[dict] = None, retries: int = 3) -> dict:
     data = json.dumps(body).encode("utf-8") if body is not None else None
     request = urllib.request.Request(url, data=data, headers=headers)
     for attempt in range(retries):
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with urllib.request.urlopen(request, timeout=30, context=SSL_CONTEXT) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             if exc.code == 429 and attempt < retries - 1:
@@ -96,6 +114,8 @@ def http_json(url: str, headers: Dict[str, str], body: Optional[dict] = None, re
                 continue
             detail = exc.read().decode("utf-8", "replace")[:300]
             raise RuntimeError(f"HTTP {exc.code} en {url.split('?')[0]}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Error de conexión con {urllib.parse.urlsplit(url).netloc}: {exc.reason}") from exc
     raise RuntimeError("sin respuesta")
 
 
