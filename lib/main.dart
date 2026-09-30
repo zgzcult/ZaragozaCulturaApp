@@ -1192,7 +1192,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
           ? NearbyScreen(
               events: _events,
               locationService: widget.locationService,
-              cardBuilder: _eventCard,
               dayLabel: _dayHeader,
               timeLabel: _eventTimeLabel,
               onOpen: _openEvent,

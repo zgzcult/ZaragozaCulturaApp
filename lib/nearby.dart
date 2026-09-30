@@ -177,9 +177,6 @@ class NearbyScreen extends StatefulWidget {
   final List<CulturalEvent> events;
   final LocationService locationService;
 
-  /// Tarjeta de una actividad (la misma que usa el resto de la app).
-  final Widget Function(CulturalEvent event) cardBuilder;
-
   /// "Hoy · miércoles, 30 de septiembre" para una fecha AAAA-MM-DD.
   final String Function(String isoDate) dayLabel;
 
@@ -194,7 +191,6 @@ class NearbyScreen extends StatefulWidget {
   const NearbyScreen({
     super.key,
     required this.events,
-    required this.cardBuilder,
     required this.dayLabel,
     required this.timeLabel,
     required this.onOpen,
@@ -408,6 +404,113 @@ class _NearbyScreenState extends State<NearbyScreen> {
     );
   }
 
+  /// Una actividad de la lista de un lugar: tarjeta con fondo, borde y franja
+  /// de color (siempre el mismo), título en negrita, fecha y horario.
+  Widget _venueActivityCard(BuildContext sheetContext, NearbyActivity item) {
+    final time = widget.timeLabel(item.event);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: const Color(0xFFEAF3F7),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            Navigator.pop(sheetContext);
+            widget.onOpen(item.event);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFBFD8E5)),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E5F74),
+                      borderRadius: BorderRadius.horizontal(
+                        left: Radius.circular(14),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.event.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              height: 1.25,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF10243E),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 14,
+                                color: Color(0xFF1E5F74),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  widget.dayLabel(item.event.date),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF425B71),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (time.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 14,
+                                  color: Color(0xFF1E5F74),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    time,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF425B71),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 10),
+                    child: Icon(Icons.chevron_right, color: Color(0xFF1E5F74)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showVenue(List<NearbyActivity> here) {
     showModalBottomSheet<void>(
       context: context,
@@ -421,30 +524,15 @@ class _NearbyScreenState extends State<NearbyScreen> {
               here.first.event.place,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 8),
-            for (final item in here)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(item.event.title),
-                subtitle: Text(
-                  [
-                    widget.dayLabel(item.event.date),
-                    if (widget.timeLabel(item.event).isNotEmpty)
-                      widget.timeLabel(item.event),
-                  ].join(' · '),
-                ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  widget.onOpen(item.event);
-                },
-              ),
+            const SizedBox(height: 12),
+            for (final item in here) _venueActivityCard(sheetContext, item),
           ],
         ),
       ),
     );
   }
 
-  Widget _mapView(List<NearbyActivity> results) {
+  Widget _mapView(List<NearbyActivity> results, String summary) {
     // Un marcador por lugar, con el número de actividades que hay allí.
     final byVenue = <String, List<NearbyActivity>>{};
     for (final item in results) {
@@ -500,41 +588,71 @@ class _NearbyScreenState extends State<NearbyScreen> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: 250,
-        child: FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            initialCenter: LatLng(_lat, _lng),
-            initialZoom: _zoomFor(_radiusKm),
-            minZoom: 10,
-            maxZoom: 18,
-            backgroundColor: const Color(0xFFE6EDF3),
-            interactionOptions: InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+      child: Stack(
+        children: [
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: LatLng(_lat, _lng),
+              initialZoom: _zoomFor(_radiusKm),
+              minZoom: 10,
+              maxZoom: 18,
+              backgroundColor: const Color(0xFFE6EDF3),
+              interactionOptions: InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
+            ),
+            children: [
+              if (widget.enableTiles)
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: _tileUserAgent,
+                ),
+              MarkerLayer(markers: markers),
+              if (widget.enableTiles)
+                RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution(
+                      'OpenStreetMap contributors',
+                      onTap: () => launchUrl(
+                        Uri.parse('https://www.openstreetmap.org/copyright'),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x22000000), blurRadius: 4),
+                  ],
+                ),
+                child: Text(
+                  summary,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF425B71),
+                  ),
+                ),
+              ),
             ),
           ),
-          children: [
-            if (widget.enableTiles)
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: _tileUserAgent,
-              ),
-            MarkerLayer(markers: markers),
-            if (widget.enableTiles)
-              RichAttributionWidget(
-                attributions: [
-                  TextSourceAttribution(
-                    'OpenStreetMap contributors',
-                    onTap: () => launchUrl(
-                      Uri.parse('https://www.openstreetmap.org/copyright'),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -592,59 +710,19 @@ class _NearbyScreenState extends State<NearbyScreen> {
           ),
         ),
         const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _mapView(results),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-          child: Text(
-            results.isEmpty
-                ? 'Sin actividades a menos de $_radiusKm km $origin'
-                : '${results.length} ${results.length == 1 ? 'actividad' : 'actividades'} '
-                      'a menos de $_radiusKm km $origin',
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF425B71),
+        // Solo el mapa: las actividades se ven al tocar un marcador.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: _mapView(
+              results,
+              results.isEmpty
+                  ? 'Sin actividades a menos de $_radiusKm km $origin. '
+                        'Prueba con más radio o con "Esta semana".'
+                  : '${results.length} ${results.length == 1 ? 'actividad' : 'actividades'} '
+                        'a menos de $_radiusKm km $origin',
             ),
           ),
-        ),
-        Expanded(
-          child: results.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      'Prueba con más radio o con "Esta semana".',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Color(0xFF66758A)),
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  itemCount: results.length,
-                  itemBuilder: (context, index) {
-                    final item = results[index];
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 8),
-                          child: Text(
-                            'A ${formatDistance(item.meters)} · ${widget.dayLabel(item.event.date)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E5F74),
-                            ),
-                          ),
-                        ),
-                        widget.cardBuilder(item.event),
-                      ],
-                    );
-                  },
-                ),
         ),
       ],
     );

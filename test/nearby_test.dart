@@ -61,17 +61,20 @@ const _pilar = LocationResult(
   lng: zaragozaCenterLng,
 );
 
-Widget _screen(LocationService service, List<CulturalEvent> events) {
+Widget _screen(
+  LocationService service,
+  List<CulturalEvent> events, {
+  List<CulturalEvent>? opened,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: NearbyScreen(
         events: events,
         locationService: service,
         enableTiles: false,
-        cardBuilder: (e) => ListTile(title: Text(e.title)),
         dayLabel: (d) => 'Día $d',
-        timeLabel: (e) => '',
-        onOpen: (_) {},
+        timeLabel: (e) => '20:00',
+        onOpen: (e) => opened?.add(e),
       ),
     ),
   );
@@ -193,17 +196,44 @@ void main() {
       await tester.pumpWidget(_screen(_FakeLocation(_pilar), [near, far]));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('a menos de 3 km de ti'), findsOneWidget);
-      expect(find.text('Concierto cercano'), findsOneWidget);
-      expect(find.text('Concierto lejano'), findsNothing);
+      expect(find.text('1 actividad a menos de 3 km de ti'), findsOneWidget);
+      // Solo mapa: ninguna lista de actividades hasta tocar un marcador.
+      expect(find.text('Concierto cercano'), findsNothing);
+      expect(find.byType(ListTile), findsNothing);
 
       await tester.tap(find.text('10 km'));
       await tester.pumpAndSettle();
-      expect(find.text('Concierto lejano'), findsOneWidget);
-      expect(find.textContaining('2 actividades'), findsOneWidget);
+      expect(find.text('2 actividades a menos de 10 km de ti'), findsOneWidget);
 
       await tester.binding.setSurfaceSize(null);
     });
+
+    testWidgets(
+      'al tocar un marcador salen las actividades del lugar como tarjetas',
+      (tester) async {
+        final opened = <CulturalEvent>[];
+        await tester.binding.setSurfaceSize(const Size(400, 1400));
+        await tester.pumpWidget(
+          _screen(_FakeLocation(_pilar), [near, far], opened: opened),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('1')); // único marcador dentro de 3 km
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sala'), findsOneWidget); // nombre del lugar
+        expect(find.text('Concierto cercano'), findsOneWidget);
+        expect(find.text('20:00'), findsOneWidget);
+        final title = tester.widget<Text>(find.text('Concierto cercano'));
+        expect(title.style?.fontWeight, FontWeight.w800); // título en negrita
+
+        await tester.tap(find.text('Concierto cercano'));
+        await tester.pumpAndSettle();
+        expect(opened.map((e) => e.id), ['n']);
+
+        await tester.binding.setSurfaceSize(null);
+      },
+    );
 
     testWidgets(
       'sin permiso previo explica el uso y pide la ubicación al pulsar',
@@ -219,7 +249,7 @@ void main() {
         await tester.tap(find.text('Usar mi ubicación'));
         await tester.pumpAndSettle();
         expect(service.requests, [false, true]);
-        expect(find.text('Concierto cercano'), findsOneWidget);
+        expect(find.text('1 actividad a menos de 3 km de ti'), findsOneWidget);
 
         await tester.binding.setSurfaceSize(null);
       },
@@ -242,8 +272,10 @@ void main() {
 
       await tester.tap(find.text('Ver desde el centro de Zaragoza'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('de la Plaza del Pilar'), findsOneWidget);
-      expect(find.text('Concierto cercano'), findsOneWidget);
+      expect(
+        find.text('1 actividad a menos de 3 km de la Plaza del Pilar'),
+        findsOneWidget,
+      );
 
       await tester.binding.setSurfaceSize(null);
     });
