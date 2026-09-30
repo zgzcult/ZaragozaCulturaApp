@@ -154,6 +154,11 @@ class CulturalEvent {
   /// Fecha (AAAA-MM-DD) de la última actualización de los datos.
   final String updatedAt;
 
+  /// Fechas (AAAA-MM-DD) de comienzo y fin de todo el acto, no solo de este
+  /// día. Sirven para saber si es de larga duración (exposiciones...).
+  final String runStart;
+  final String runEnd;
+
   /// Franjas horarias del mismo acto en el mismo día (p. ej. mañana y tarde).
   final List<String> timeSlots;
 
@@ -175,6 +180,8 @@ class CulturalEvent {
     this.imageCredit = '',
     this.genericImage = false,
     this.updatedAt = '',
+    this.runStart = '',
+    this.runEnd = '',
     this.timeSlots = const <String>[],
   });
 
@@ -211,10 +218,24 @@ class CulturalEvent {
       imageCredit: _creditText(json['imageCredit']),
       genericImage: json['genericImage'] == true,
       updatedAt: (json['lastUpdated'] ?? '').toString().split('T').first,
+      runStart: (json['runStartDate'] ?? '').toString(),
+      runEnd: (json['runEndDate'] ?? '').toString(),
     );
   }
 
-  CulturalEvent withTimeSlots(List<String> slots) {
+  /// ¿El acto dura más de una semana (exposiciones, ciclos largos...)?
+  bool get isLongRunning {
+    final start = DateTime.tryParse(runStart);
+    final end = DateTime.tryParse(runEnd);
+    if (start == null || end == null) return false;
+    return end.difference(start).inDays >= _longRunDays;
+  }
+
+  CulturalEvent withTimeSlots(
+    List<String> slots, {
+    String? start,
+    String? end,
+  }) {
     return CulturalEvent(
       id: id,
       title: title,
@@ -233,6 +254,8 @@ class CulturalEvent {
       imageCredit: imageCredit,
       genericImage: genericImage,
       updatedAt: updatedAt,
+      runStart: start ?? runStart,
+      runEnd: end ?? runEnd,
       timeSlots: slots,
     );
   }
@@ -266,17 +289,60 @@ String _timeSlotOf(CulturalEvent event) {
 List<CulturalEvent> _mergeSameDay(List<CulturalEvent> events) {
   final merged = <String, CulturalEvent>{};
   final slots = <String, Set<String>>{};
+  // Primera y última fecha cargada de cada actividad: sirve de duración
+  // aproximada cuando el servidor no envía las fechas reales del acto.
+  final firstDate = <String, String>{};
+  final lastDate = <String, String>{};
   for (final event in events) {
     final key = '${event.title}|${event.place}|${event.date}';
+    final activity = '${event.title}|${event.place}';
     final slot = _timeSlotOf(event);
     merged.putIfAbsent(key, () => event);
     final set = slots.putIfAbsent(key, () => <String>{});
     if (slot.isNotEmpty) set.add(slot);
+    final first = firstDate[activity];
+    if (first == null || event.date.compareTo(first) < 0) {
+      firstDate[activity] = event.date;
+    }
+    final last = lastDate[activity];
+    if (last == null || event.date.compareTo(last) > 0) {
+      lastDate[activity] = event.date;
+    }
   }
   return merged.entries.map((entry) {
+    final event = entry.value;
     final list = slots[entry.key]!.toList()..sort();
-    return entry.value.withTimeSlots(list);
+    final activity = '${event.title}|${event.place}';
+    return event.withTimeSlots(
+      list,
+      start: event.runStart.isEmpty ? firstDate[activity] : null,
+      end: event.runEnd.isEmpty ? lastDate[activity] : null,
+    );
   }).toList();
+}
+
+/// Una actividad que dura más de este número de días se considera de larga
+/// duración y se muestra después de las demás.
+const int _longRunDays = 7;
+
+/// Orden de las actividades de un mismo día: primero las de pocos días (con
+/// hora, por orden de hora; luego las que no tienen hora) y al final las de
+/// larga duración, como las exposiciones.
+int compareEventsWithinDay(CulturalEvent a, CulturalEvent b) {
+  if (a.isLongRunning != b.isLongRunning) {
+    return a.isLongRunning ? 1 : -1;
+  }
+  final timeA = a.timeSlots.isEmpty ? null : a.timeSlots.first;
+  final timeB = b.timeSlots.isEmpty ? null : b.timeSlots.first;
+  if (timeA != null && timeB != null) {
+    final byTime = timeA.compareTo(timeB);
+    if (byTime != 0) return byTime;
+  } else if (timeA != null) {
+    return -1;
+  } else if (timeB != null) {
+    return 1;
+  }
+  return a.title.compareTo(b.title);
 }
 
 /// Una actividad encontrada por la búsqueda: su fecha más próxima y cuántas
@@ -362,6 +428,10 @@ List<SearchResult> searchEvents(
   scored.sort((a, b) {
     final byScore = a.score.compareTo(b.score);
     if (byScore != 0) return byScore;
+    // A igual relevancia, primero las actividades de pocos días.
+    final longA = a.result.event.isLongRunning;
+    final longB = b.result.event.isLongRunning;
+    if (longA != longB) return longA ? 1 : -1;
     final byDate = a.result.event.date.compareTo(b.result.event.date);
     return byDate != 0
         ? byDate
@@ -890,6 +960,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
           .toList();
     }
 
+    byDate.sort(compareEventsWithinDay);
     return byDate;
   }
 
@@ -944,8 +1015,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
   /// próximo al más lejano.
   List<Widget> _favoriteSlivers() {
     final todayKey = _isoDateKey(DateTime.now());
-    String firstSlot(CulturalEvent e) =>
-        e.timeSlots.isEmpty ? '' : e.timeSlots.first;
     final favorites =
         _events
             .where(
@@ -956,7 +1025,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
             .toList()
           ..sort((a, b) {
             final byDate = a.date.compareTo(b.date);
-            return byDate != 0 ? byDate : firstSlot(a).compareTo(firstSlot(b));
+            return byDate != 0 ? byDate : compareEventsWithinDay(a, b);
           });
 
     if (favorites.isEmpty) {

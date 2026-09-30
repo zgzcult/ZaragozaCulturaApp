@@ -430,6 +430,10 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
                     "source": "ayuntamiento",
                     "sourceId": str(source.get("id", "")),
                     "endDate": event_date,
+                    # Duración total del acto (no de este día): la app lo usa
+                    # para dejar al final las actividades de larga duración.
+                    "runStartDate": start.strftime("%Y-%m-%d"),
+                    "runEndDate": end.strftime("%Y-%m-%d"),
                     "endTime": normalize_text(opening.get("endTime")),
                     "lastUpdated": now_iso(),
                 })
