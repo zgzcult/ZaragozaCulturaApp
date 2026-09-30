@@ -12,6 +12,7 @@ import 'ads.dart';
 import 'event_classifier.dart';
 import 'nearby.dart';
 import 'reminders.dart';
+import 'suggestion.dart';
 
 const List<String> _eventsApiUrls = <String>[
   'https://zaragoza-cultura-app.onrender.com/events',
@@ -90,18 +91,6 @@ const String _remindersKey = 'reminders_enabled';
 /// Formulario (Google Forms) donde los usuarios envían sus eventos.
 const String _submitEventUrl =
     'https://docs.google.com/forms/d/e/1FAIpQLSdJBr0cO7DEm5b1ih6yOCCo0Lv6SjHPR1bQXYavyiNpKq0Zkg/viewform';
-
-const String _sourceNotice =
-    'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura).';
-const String _ownWorkNotice =
-    'Las categorías y la agrupación de horarios son elaboración de esta '
-    'aplicación, que no es oficial.';
-
-String _updatedLabel(String isoDate) {
-  final date = DateTime.tryParse(isoDate);
-  if (date == null) return '';
-  return ' Actualizado el ${date.day}/${date.month}/${date.year}.';
-}
 
 String _creditText(dynamic value) {
   if (value is Map) {
@@ -1849,11 +1838,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           size: 18,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          _eventDateRange(event),
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 15,
+                        Expanded(
+                          child: Text(
+                            _eventDateRange(event),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
                       ],
@@ -1986,16 +1977,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '$_sourceNotice${_updatedLabel(event.updatedAt)} '
-                '$_ownWorkNotice',
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.4,
-                  color: Color(0xFF738196),
                 ),
               ),
             ],
@@ -2190,10 +2171,13 @@ class AboutScreen extends StatelessWidget {
             ),
             _section(
               'Origen de los datos',
-              'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura) '
-                  '(agenda cultural de la sede electrónica). La información se '
-                  'actualiza periódicamente; cada actividad indica la fecha de '
-                  'su última actualización.',
+              'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de '
+                  'Cultura), a través de su agenda cultural en la sede '
+                  'electrónica. Además, la agenda podrá incluir actividades '
+                  'propias de esta aplicación y propuestas recibidas mediante '
+                  'el formulario «Envía tu evento»; cuando sea así, se indicará '
+                  'en la ficha de la actividad. La información se actualiza '
+                  'periódicamente.',
             ),
             _section(
               'Elaboración propia',
@@ -2382,6 +2366,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 value: _reminders,
                 onChanged: _toggleReminders,
+              ),
+            ),
+            _tile(
+              icon: Icons.lightbulb_outline,
+              title: 'Sugerir mejoras',
+              subtitle: 'Cuéntanos qué cambiarías o añadirías en la app.',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SuggestionScreen()),
               ),
             ),
             _tile(

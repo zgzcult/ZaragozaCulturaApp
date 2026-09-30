@@ -21,6 +21,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from pymongo import MongoClient
 
+import submissions
+
 # Configuración de MongoDB
 MONGODB_URI = os.environ.get("MONGODB_URI")
 
@@ -106,7 +108,37 @@ def render_privacy_page() -> str:
     return page
 
 
+_submission_limiter = submissions.RateLimiter()
+
+
 class EventHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        # Se lee siempre el mensaje (si no es enorme): cerrar la conexión con
+        # datos sin leer puede hacer que el cliente reciba un reset en vez de
+        # la respuesta.
+        raw = self.rfile.read(length) if 0 < length <= submissions.MAX_BODY_BYTES else b""
+
+        if urlparse(self.path).path != "/submit":
+            status, body = 404, {"error": "Not found"}
+        elif length > submissions.MAX_BODY_BYTES:
+            status, body = 413, {"ok": False, "error": "El mensaje es demasiado largo."}
+        else:
+            # Render pasa la IP real en X-Forwarded-For.
+            forwarded = self.headers.get("X-Forwarded-For", "")
+            ip = forwarded.split(",")[0].strip() or self.client_address[0]
+            status, body = submissions.process_submission(raw, ip, limiter=_submission_limiter)
+
+        payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
     def do_GET(self):
         if urlparse(self.path).path in ("/", "/index", "/index.html"):
             self.send_response(200)
