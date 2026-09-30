@@ -440,6 +440,19 @@ List<SearchResult> searchEvents(
   return [for (final item in scored) item.result];
 }
 
+/// Enlace de «Más información». Si la actividad apunta a una página general
+/// del portal (zaragoza.es/sede/portal...), no se usa: se abre la ficha de la
+/// actividad en la agenda de cultura, donde la encontró el scraper.
+String moreInfoTarget(CulturalEvent event) {
+  final url = event.moreInfoUrl.trim();
+  final uri = Uri.tryParse(url);
+  final isPortal =
+      uri != null &&
+      uri.host.toLowerCase().endsWith('zaragoza.es') &&
+      uri.path.toLowerCase().startsWith('/sede/portal');
+  return url.isEmpty || isPortal ? event.officialUrl : url;
+}
+
 /// Texto para compartir una actividad (mensajería, redes...).
 String buildShareText(CulturalEvent event) {
   final date = DateTime.tryParse(event.date);
@@ -1147,6 +1160,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 builder: (_) => SettingsScreen(
                   remindersEnabled: _remindersEnabled,
                   onRemindersChanged: _setReminders,
+                  locationService: widget.locationService,
                 ),
               ),
             );
@@ -1383,20 +1397,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           ),
                         ),
                     ],
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
-                        child: Text(
-                          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de Cultura). '
-                          'Aplicación no oficial.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF738196),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1737,10 +1737,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   Future<void> _openMoreInfo() async {
-    final targetUrl = event.moreInfoUrl.isEmpty
-        ? event.officialUrl
-        : event.moreInfoUrl;
-    final uri = Uri.parse(targetUrl);
+    final uri = Uri.parse(moreInfoTarget(event));
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('No se pudo abrir la información del evento');
     }
@@ -2217,10 +2214,13 @@ class SettingsScreen extends StatefulWidget {
   /// concedió el permiso de notificaciones).
   final Future<bool> Function(bool enabled) onRemindersChanged;
 
+  final LocationService locationService;
+
   const SettingsScreen({
     super.key,
     required this.remindersEnabled,
     required this.onRemindersChanged,
+    this.locationService = const DeviceLocationService(),
   });
 
   @override
@@ -2229,6 +2229,57 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _reminders = widget.remindersEnabled;
+  bool _locationAllowed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.locationService.hasPermission().then((allowed) {
+      if (mounted) setState(() => _locationAllowed = allowed);
+    });
+  }
+
+  /// Activar muestra el aviso del sistema. Android no permite quitar un
+  /// permiso desde la app ni volver a pedirlo si el usuario marcó «No volver a
+  /// preguntar»; en esos casos se ofrece ir a los ajustes del teléfono.
+  Future<void> _toggleLocation(bool value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final service = widget.locationService;
+    SnackBar withSettings(String message) => SnackBar(
+      content: Text(message),
+      action: SnackBarAction(
+        label: 'Abrir ajustes',
+        onPressed: service.openSettings,
+      ),
+    );
+
+    if (!value) {
+      messenger.showSnackBar(
+        withSettings(
+          'Para desactivar la ubicación, hazlo en los ajustes del teléfono.',
+        ),
+      );
+      return;
+    }
+    final status = await service.requestPermission();
+    if (!mounted) return;
+    switch (status) {
+      case LocationStatus.ok:
+        setState(() => _locationAllowed = true);
+      case LocationStatus.deniedForever:
+        messenger.showSnackBar(
+          withSettings(
+            'Has bloqueado el permiso. Solo se puede activar en los ajustes del teléfono.',
+          ),
+        );
+      default:
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('No se concedió el permiso de ubicación.'),
+          ),
+        );
+    }
+  }
 
   Future<void> _toggleReminders(bool value) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -2366,6 +2417,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 value: _reminders,
                 onChanged: _toggleReminders,
+              ),
+            ),
+            Card(
+              elevation: 0,
+              color: Colors.white,
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Color(0xFFE4ECF4)),
+              ),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                secondary: const Icon(
+                  Icons.my_location,
+                  color: Color(0xFF1E5F74),
+                ),
+                title: const Text(
+                  'Ubicación para «Cerca de mí»',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text(
+                  'Se usa solo en tu móvil para mostrarte las actividades cercanas. No se guarda.',
+                ),
+                value: _locationAllowed,
+                onChanged: _toggleLocation,
               ),
             ),
             _tile(

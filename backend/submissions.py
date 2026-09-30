@@ -107,6 +107,8 @@ def send_email_resend(subject: str, text: str, reply_to: Optional[str] = None) -
     api_key = os.environ.get("RESEND_API_KEY", "").strip()
     to = os.environ.get("NOTIFY_EMAIL", "").strip()
     if not api_key or not to:
+        missing = [n for n, v in (("RESEND_API_KEY", api_key), ("NOTIFY_EMAIL", to)) if not v]
+        print(f"[WARN] Correo no enviado: falta la variable de entorno {', '.join(missing)}.")
         return False
     body: Dict[str, Any] = {
         "from": os.environ.get("EMAIL_FROM", "Zaragoza Cultura <onboarding@resend.dev>"),
@@ -128,9 +130,18 @@ def send_email_resend(subject: str, text: str, reply_to: Optional[str] = None) -
     )
     try:
         with urllib.request.urlopen(request, timeout=20, context=_ssl_context()) as response:
-            return 200 <= response.status < 300
+            ok = 200 <= response.status < 300
+            if not ok:
+                print(f"[WARN] Resend respondió {response.status}.")
+            return ok
+    except urllib.error.HTTPError as exc:
+        # Resend explica el motivo en el cuerpo de la respuesta (clave no
+        # válida, destinatario no permitido con el remitente de pruebas...).
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        print(f"[WARN] Resend rechazó el correo (HTTP {exc.code}): {detail}")
+        return False
     except (urllib.error.URLError, TimeoutError) as exc:
-        print(f"[WARN] No se pudo enviar el correo: {exc}")
+        print(f"[WARN] No se pudo contactar con Resend: {exc}")
         return False
 
 
@@ -182,6 +193,7 @@ def process_submission(
     subject, text = build_email(clean)
     reply_to = clean["contact"] if _EMAIL_RE.match(clean["contact"]) else None
     emailed = send(subject, text, reply_to)
+    print(f"[INFO] Envío '{clean['type']}' recibido (guardado={stored}, correo={emailed}).")
 
     if not stored and not emailed:
         return 503, {"ok": False, "error": "No se pudo registrar el mensaje. Inténtalo más tarde."}

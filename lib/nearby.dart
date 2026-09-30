@@ -119,10 +119,50 @@ abstract class LocationService {
   Future<LocationResult> locate({required bool askPermission});
 
   Future<void> openSettings();
+
+  /// ¿La app ya tiene permiso de ubicación?
+  Future<bool> hasPermission();
+
+  /// Muestra el aviso del sistema para conceder el permiso. Devuelve
+  /// `ok` si se concedió, `deniedForever` si el usuario lo bloqueó de forma
+  /// definitiva (entonces solo se puede cambiar en los ajustes del teléfono)
+  /// y `denied` si simplemente lo rechazó.
+  Future<LocationStatus> requestPermission();
 }
 
 class DeviceLocationService extends LocationService {
   const DeviceLocationService();
+
+  @override
+  Future<bool> hasPermission() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<LocationStatus> requestPermission() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        return LocationStatus.deniedForever;
+      }
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
+        return LocationStatus.ok;
+      }
+      return LocationStatus.denied;
+    } catch (_) {
+      return LocationStatus.error;
+    }
+  }
 
   @override
   Future<LocationResult> locate({required bool askPermission}) async {

@@ -53,6 +53,12 @@ class _FakeLocation extends LocationService {
 
   @override
   Future<void> openSettings() async {}
+
+  @override
+  Future<bool> hasPermission() async => alreadyGranted;
+
+  @override
+  Future<LocationStatus> requestPermission() async => result.status;
 }
 
 const _pilar = LocationResult(

@@ -392,6 +392,10 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
     if not re.match(r"https://www\.zaragoza\.es/sede/servicio/cultura/evento/\d+$", official_url):
         official_url = f"https://www.zaragoza.es/sede/servicio/cultura/evento/{source.get('id')}"
     more_info_url = normalize_text(source.get("moreInfoUrl")) or official_url
+    # Las páginas generales del portal (zaragoza.es/sede/portal/...) no
+    # informan de la actividad: se enlaza mejor la ficha de la agenda.
+    if re.match(r"https?://(www\.)?zaragoza\.es/sede/portal", more_info_url, re.I):
+        more_info_url = official_url
 
     description = clean_html_to_text(normalize_text(source.get("description")))
     category_text = " ".join(

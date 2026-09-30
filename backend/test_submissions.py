@@ -3,6 +3,8 @@
     python backend/test_submissions.py
 """
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -10,6 +12,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -61,6 +64,32 @@ class EmailTests(unittest.TestCase):
         subject, text = submissions.build_email(clean)
         self.assertEqual(subject, "Evento")
         self.assertIn("Contacto: yo@ejemplo.es", text)
+
+    def test_si_resend_rechaza_se_registra_el_motivo(self):
+        error = urllib.error.HTTPError(
+            "https://api.resend.com/emails",
+            403,
+            "Forbidden",
+            {},
+            io.BytesIO(b'{"message":"You can only send testing emails to your own email address"}'),
+        )
+        env = {"RESEND_API_KEY": "re_clave_de_prueba", "NOTIFY_EMAIL": "yo@ejemplo.es"}
+        log = io.StringIO()
+        with mock.patch.dict(os.environ, env), mock.patch("urllib.request.urlopen", side_effect=error):
+            with contextlib.redirect_stdout(log):
+                result = submissions.send_email_resend("Mejora", "texto")
+        self.assertFalse(result)
+        self.assertIn("403", log.getvalue())
+        self.assertIn("your own email address", log.getvalue())
+        self.assertNotIn("re_clave_de_prueba", log.getvalue())  # la clave no se escribe en los registros
+
+    def test_sin_configurar_indica_que_variable_falta(self):
+        log = io.StringIO()
+        with mock.patch.dict(os.environ, {"RESEND_API_KEY": "", "NOTIFY_EMAIL": ""}):
+            with contextlib.redirect_stdout(log):
+                self.assertFalse(submissions.send_email_resend("Mejora", "texto"))
+        self.assertIn("RESEND_API_KEY", log.getvalue())
+        self.assertIn("NOTIFY_EMAIL", log.getvalue())
 
     def test_sin_configurar_no_envia(self):
         old = {k: os.environ.pop(k, None) for k in ("RESEND_API_KEY", "NOTIFY_EMAIL")}
