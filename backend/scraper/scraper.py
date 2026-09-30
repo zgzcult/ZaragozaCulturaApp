@@ -363,6 +363,24 @@ def dataset_date(value: Any) -> Optional[datetime]:
         return None
 
 
+def coordinates_of(obj: Any) -> Optional[tuple]:
+    """(latitud, longitud) de un objeto del dataset con `geometry`, o None.
+
+    El dataset usa GeoJSON: las coordenadas vienen como [longitud, latitud].
+    """
+    geometry = obj.get("geometry") if isinstance(obj, dict) else None
+    coords = geometry.get("coordinates") if isinstance(geometry, dict) else None
+    if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+        return None
+    try:
+        lng, lat = float(coords[0]), float(coords[1])
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return None
+    return (round(lat, 6), round(lng, 6))
+
+
 def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Optional[set[str]] = None) -> List[Dict[str, Any]]:
     source_id = str(source.get("id", ""))
     if public_ids is not None and source_id not in public_ids:
@@ -394,6 +412,7 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
             continue
         location = sub_event.get("location") or {}
         place = normalize_text(location.get("title") if isinstance(location, dict) else location) or normalize_text(source.get("location"))
+        coords = coordinates_of(location) or coordinates_of(source)
         hours_by_day: Dict[int, List[Dict[str, Any]]] = {}
         for opening in sub_event.get("openingHours", []):
             if not isinstance(opening, dict):
@@ -432,6 +451,8 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
                     "endDate": event_date,
                     # Duración total del acto (no de este día): la app lo usa
                     # para dejar al final las actividades de larga duración.
+                    "lat": coords[0] if coords else None,
+                    "lng": coords[1] if coords else None,
                     "runStartDate": start.strftime("%Y-%m-%d"),
                     "runEndDate": end.strftime("%Y-%m-%d"),
                     "endTime": normalize_text(opening.get("endTime")),

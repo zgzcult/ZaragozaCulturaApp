@@ -3,6 +3,9 @@
     <!-- Avisos de favoritos (notificaciones locales programadas). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- "Cerca de mí": ubicación aproximada o precisa, solo en el dispositivo. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <application
         android:label="Zaragoza Cultura"
         android:name="${applicationName}"

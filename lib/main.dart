@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'ads.dart';
 import 'event_classifier.dart';
+import 'nearby.dart';
 import 'reminders.dart';
 
 const List<String> _eventsApiUrls = <String>[
@@ -159,6 +160,10 @@ class CulturalEvent {
   final String runStart;
   final String runEnd;
 
+  /// Coordenadas del lugar (para "Cerca de mí"); null si no se conocen.
+  final double? lat;
+  final double? lng;
+
   /// Franjas horarias del mismo acto en el mismo día (p. ej. mañana y tarde).
   final List<String> timeSlots;
 
@@ -182,6 +187,8 @@ class CulturalEvent {
     this.updatedAt = '',
     this.runStart = '',
     this.runEnd = '',
+    this.lat,
+    this.lng,
     this.timeSlots = const <String>[],
   });
 
@@ -220,6 +227,8 @@ class CulturalEvent {
       updatedAt: (json['lastUpdated'] ?? '').toString().split('T').first,
       runStart: (json['runStartDate'] ?? '').toString(),
       runEnd: (json['runEndDate'] ?? '').toString(),
+      lat: (json['lat'] as num?)?.toDouble(),
+      lng: (json['lng'] as num?)?.toDouble(),
     );
   }
 
@@ -256,6 +265,8 @@ class CulturalEvent {
       updatedAt: updatedAt,
       runStart: start ?? runStart,
       runEnd: end ?? runEnd,
+      lat: lat,
+      lng: lng,
       timeSlots: slots,
     );
   }
@@ -659,10 +670,12 @@ class FavoritesStorage {
 
 class ZaragozaCulturaApp extends StatelessWidget {
   final ZaragozaEventsRepository repository;
+  final LocationService locationService;
 
   const ZaragozaCulturaApp({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
+    this.locationService = const DeviceLocationService(),
   });
 
   @override
@@ -691,17 +704,22 @@ class ZaragozaCulturaApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: AgendaScreen(repository: repository),
+      home: AgendaScreen(
+        repository: repository,
+        locationService: locationService,
+      ),
     );
   }
 }
 
 class AgendaScreen extends StatefulWidget {
   final ZaragozaEventsRepository repository;
+  final LocationService locationService;
 
   const AgendaScreen({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
+    this.locationService = const DeviceLocationService(),
   });
 
   @override
@@ -729,6 +747,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   final ReminderService _reminderService = ReminderService();
 
   bool searchMode = false;
+  bool nearbyMode = false;
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
 
@@ -977,22 +996,25 @@ class _AgendaScreenState extends State<AgendaScreen> {
     await _syncReminders();
   }
 
-  Widget _eventCard(CulturalEvent event) {
-    final isFavorite = _favoriteEventIds.contains(event.id);
-    return _EventCard(
-      event: event,
-      isFavorite: isFavorite,
-      onFavorite: () => toggleFavorite(event.id),
-      onOpen: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EventDetailScreen(
-            event: event,
-            isFavorite: isFavorite,
-            onToggleFavorite: () => toggleFavorite(event.id),
-          ),
+  void _openEvent(CulturalEvent event) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EventDetailScreen(
+          event: event,
+          isFavorite: _favoriteEventIds.contains(event.id),
+          onToggleFavorite: () => toggleFavorite(event.id),
         ),
       ),
+    );
+  }
+
+  Widget _eventCard(CulturalEvent event) {
+    return _EventCard(
+      event: event,
+      isFavorite: _favoriteEventIds.contains(event.id),
+      onFavorite: () => toggleFavorite(event.id),
+      onOpen: () => _openEvent(event),
     );
   }
 
@@ -1099,24 +1121,37 @@ class _AgendaScreenState extends State<AgendaScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFD),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: searchMode ? 1 : (favoritesOnly ? 2 : 0),
+        selectedIndex: nearbyMode
+            ? 1
+            : searchMode
+            ? 2
+            : (favoritesOnly ? 3 : 0),
         onDestinationSelected: (index) {
           if (index == 0) {
             setState(() {
               favoritesOnly = false;
               searchMode = false;
+              nearbyMode = false;
             });
           } else if (index == 1) {
             setState(() {
               favoritesOnly = false;
-              searchMode = true;
+              searchMode = false;
+              nearbyMode = true;
             });
           } else if (index == 2) {
             setState(() {
-              favoritesOnly = !favoritesOnly || searchMode;
-              searchMode = false;
+              favoritesOnly = false;
+              searchMode = true;
+              nearbyMode = false;
             });
           } else if (index == 3) {
+            setState(() {
+              favoritesOnly = !favoritesOnly || searchMode || nearbyMode;
+              searchMode = false;
+              nearbyMode = false;
+            });
+          } else if (index == 4) {
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -1134,6 +1169,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
             selectedIcon: Icon(Icons.calendar_month),
             label: 'Agenda',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.near_me_outlined),
+            selectedIcon: Icon(Icons.near_me),
+            label: 'Cerca de mí',
+          ),
           NavigationDestination(icon: Icon(Icons.search), label: 'Buscar'),
           NavigationDestination(
             icon: Icon(Icons.favorite_border),
@@ -1148,6 +1188,15 @@ class _AgendaScreenState extends State<AgendaScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : nearbyMode
+          ? NearbyScreen(
+              events: _events,
+              locationService: widget.locationService,
+              cardBuilder: _eventCard,
+              dayLabel: _dayHeader,
+              timeLabel: _eventTimeLabel,
+              onOpen: _openEvent,
+            )
           : searchMode
           ? _buildSearchBody()
           : SafeArea(
