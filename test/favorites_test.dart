@@ -55,6 +55,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 1600));
     await tester.pumpWidget(ZaragozaCulturaApp(repository: repo));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Actividades'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Favoritos'));
     await tester.pumpAndSettle();
@@ -76,6 +78,8 @@ void main() {
     await tester.pumpWidget(
       const ZaragozaCulturaApp(repository: _FakeRepository([])),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Actividades'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Favoritos'));
     await tester.pumpAndSettle();

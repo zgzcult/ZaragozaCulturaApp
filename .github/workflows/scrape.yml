@@ -32,3 +32,8 @@ jobs:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
             GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
             PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        # Restaurantes (datos abiertos del Ayuntamiento) para el mapa de la app.
+        - run: python backend/scraper/places.py
+          continue-on-error: true
+          env:
+            MONGODB_URI: ${{ secrets.MONGODB_URI }}

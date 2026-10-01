@@ -194,6 +194,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 2400));
     await tester.pumpWidget(ZaragozaCulturaApp(repository: repo));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Actividades'));
+    await tester.pumpAndSettle();
 
     final taller = tester.getTopLeft(find.text('Taller de mañana')).dy;
     final concierto = tester.getTopLeft(find.text('Concierto de tarde')).dy;

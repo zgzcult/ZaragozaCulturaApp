@@ -302,6 +302,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Actividades'));
+    await tester.pumpAndSettle();
 
     for (final label in [
       'Agenda',

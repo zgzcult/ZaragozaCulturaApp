@@ -51,6 +51,30 @@ def get_events_from_db(days=None):
         raise RuntimeError(f"Error conectando a MongoDB: {exc}")
 
 
+PLACE_KINDS = {"restaurante"}
+PLACES_CACHE_SECONDS = 6 * 3600
+_places_cache = {}
+
+
+def get_places_payload(kind):
+    """Lugares de un tipo (restaurantes...) en JSON compacto, con caché de 6 h."""
+    hit = _places_cache.get(kind)
+    if hit and time.time() - hit[0] < PLACES_CACHE_SECONDS:
+        return hit[1]
+    if not MONGODB_URI:
+        raise RuntimeError("MONGODB_URI no está configurada en las variables de entorno")
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        fields = {"_id": 0, "id": 1, "name": 1, "address": 1, "phone": 1, "url": 1, "lat": 1, "lng": 1}
+        places = list(client["zaragoza_cultura"]["places"].find({"type": kind}, fields))
+        client.close()
+    except Exception as exc:
+        raise RuntimeError(f"Error conectando a MongoDB: {exc}")
+    payload = json.dumps(places, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    _places_cache[kind] = (time.time(), payload)
+    return payload
+
+
 def get_payload(days):
     """JSON compacto en bytes, con caché en memoria."""
     hit = _cache.get(days)
@@ -174,6 +198,31 @@ class EventHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(page)))
             self.end_headers()
             self.wfile.write(page)
+            return
+
+        if url.path == "/places":
+            kind = parse_qs(url.query).get("type", [""])[0]
+            if kind not in PLACE_KINDS:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Tipo no válido"}).encode("utf-8"))
+                return
+            try:
+                payload = get_places_payload(kind)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                if "gzip" in self.headers.get("Accept-Encoding", ""):
+                    payload = gzip.compress(payload, compresslevel=6)
+                    self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
             return
 
         if url.path in ("/events", "/events.json"):

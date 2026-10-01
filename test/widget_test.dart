@@ -7,7 +7,7 @@ import 'package:zaragoza_cultura_app/main.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Shows the Zaragoza cultural agenda', (
+  testWidgets('La pantalla principal ofrece los tres accesos', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -15,7 +15,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Zaragoza Cultura'), findsOneWidget);
+    expect(find.text('Actividades'), findsOneWidget);
+    expect(find.text('Restaurantes'), findsOneWidget);
+    expect(find.text('Sugerencia del día'), findsOneWidget);
+  });
+
+  testWidgets('Actividades abre la agenda y se puede volver al inicio', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const ZaragozaCulturaApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Actividades'));
+    await tester.pumpAndSettle();
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.byType(ListView), findsWidgets);
+
+    await tester.tap(find.byTooltip('Inicio'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restaurantes'), findsOneWidget);
   });
 }

@@ -9,9 +9,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ads.dart';
+import 'day_suggestion.dart';
 import 'event_classifier.dart';
+import 'home.dart';
 import 'nearby.dart';
 import 'reminders.dart';
+import 'restaurants.dart';
 import 'suggestion.dart';
 
 const List<String> _eventsApiUrls = <String>[
@@ -673,11 +676,15 @@ class FavoritesStorage {
 class ZaragozaCulturaApp extends StatelessWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
+  final PlacesRepository placesRepository;
+  final WeatherSource weatherSource;
 
   const ZaragozaCulturaApp({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
     this.locationService = const DeviceLocationService(),
+    this.placesRepository = const HttpPlacesRepository(),
+    this.weatherSource = const HttpWeatherSource(),
   });
 
   @override
@@ -706,9 +713,11 @@ class ZaragozaCulturaApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: AgendaScreen(
+      home: HomeScreen(
         repository: repository,
         locationService: locationService,
+        placesRepository: placesRepository,
+        weatherSource: weatherSource,
       ),
     );
   }
@@ -1012,7 +1021,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   }
 
   Widget _eventCard(CulturalEvent event) {
-    return _EventCard(
+    return EventCard(
       event: event,
       isFavorite: _favoriteEventIds.contains(event.id),
       onFavorite: () => toggleFavorite(event.id),
@@ -1213,15 +1222,29 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              favoritesOnly
-                                  ? 'Tus favoritos'
-                                  : 'Zaragoza Cultura',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF10243E),
-                              ),
+                            Row(
+                              children: [
+                                if (Navigator.canPop(context))
+                                  IconButton(
+                                    tooltip: 'Inicio',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () =>
+                                        Navigator.maybePop(context),
+                                    icon: const Icon(Icons.arrow_back),
+                                  ),
+                                Expanded(
+                                  child: Text(
+                                    favoritesOnly
+                                        ? 'Tus favoritos'
+                                        : 'Actividades',
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF10243E),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -1377,7 +1400,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                               final isFavorite = _favoriteEventIds.contains(
                                 event.id,
                               );
-                              return _EventCard(
+                              return EventCard(
                                 event: event,
                                 isFavorite: isFavorite,
                                 onFavorite: () => toggleFavorite(event.id),
@@ -1533,13 +1556,14 @@ String _weekdayShort(DateTime date) {
   ][date.weekday - 1];
 }
 
-class _EventCard extends StatelessWidget {
+class EventCard extends StatelessWidget {
   final CulturalEvent event;
   final bool isFavorite;
   final VoidCallback onFavorite;
   final VoidCallback onOpen;
 
-  const _EventCard({
+  const EventCard({
+    super.key,
     required this.event,
     required this.isFavorite,
     required this.onFavorite,

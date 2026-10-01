@@ -172,6 +172,8 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(400, 1600));
       await tester.pumpWidget(ZaragozaCulturaApp(repository: repo));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Actividades'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('Buscar'));
       await tester.pumpAndSettle();
