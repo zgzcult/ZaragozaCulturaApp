@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'event_classifier.dart';
 import 'nearby.dart';
+import 'brand.dart';
 
 const String _placesUrl =
     'https://zaragoza-cultura-app.onrender.com/places?type=restaurante';
@@ -405,7 +406,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF10243E),
+                  color: Brand.navy,
                   shadows: [
                     Shadow(color: Colors.white, blurRadius: 3),
                     Shadow(color: Colors.white, blurRadius: 3),
@@ -437,7 +438,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
           height: 22,
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF2463D9),
+              color: Brand.navy,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 3),
               boxShadow: const [
@@ -528,11 +529,11 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
               fillColor: Colors.white,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                borderSide: const BorderSide(color: Brand.line),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                borderSide: const BorderSide(color: Brand.line),
               ),
             ),
           ),
@@ -577,9 +578,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                             ),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFE4ECF4),
-                              ),
+                              border: Border.all(color: Brand.line),
                             ),
                             child: Row(
                               children: [
@@ -592,7 +591,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                                         place.name,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
-                                          color: Color(0xFF10243E),
+                                          color: Brand.navy,
                                         ),
                                       ),
                                       if (place.address.isNotEmpty)
@@ -613,7 +612,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                                 ),
                                 const Icon(
                                   Icons.chevron_right,
-                                  color: Color(0xFF1E5F74),
+                                  color: Brand.navy,
                                 ),
                               ],
                             ),
@@ -665,7 +664,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
   Widget build(BuildContext context) {
     final showTabs = !_loading && !_failed;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: Brand.cream,
       appBar: AppBar(title: const Text('Restaurantes')),
       floatingActionButton: showTabs && !_showList
           ? FloatingActionButton.small(
@@ -745,7 +744,7 @@ class _PlaceCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF1E5F74)),
+          Icon(icon, size: 14, color: Brand.navy),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -759,9 +758,9 @@ class _PlaceCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF3F7),
+        color: Brand.skyTint,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFBFD8E5)),
+        border: Border.all(color: Brand.skyLine),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -770,7 +769,7 @@ class _PlaceCard extends StatelessWidget {
             Container(
               width: 6,
               decoration: const BoxDecoration(
-                color: Color(0xFF1E5F74),
+                color: Brand.navy,
                 borderRadius: BorderRadius.horizontal(
                   left: Radius.circular(14),
                 ),
@@ -788,7 +787,7 @@ class _PlaceCard extends StatelessWidget {
                         fontSize: 17,
                         height: 1.25,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF10243E),
+                        color: Brand.navy,
                       ),
                     ),
                     if (place.address.isNotEmpty)
@@ -806,7 +805,7 @@ class _PlaceCard extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: onGoogleMaps,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E5F74),
+                          backgroundColor: Brand.navy,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         icon: const Icon(Icons.map_outlined),

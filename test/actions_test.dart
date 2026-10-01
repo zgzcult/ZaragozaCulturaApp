@@ -104,7 +104,7 @@ void main() {
       final official = text.indexOf('zaragoza.es/sede');
       expect(app, greaterThan(0));
       expect(official, greaterThan(app));
-      expect(text, contains('Zaragoza Cultura'));
+      expect(text, contains('Maña Zaragoza'));
     });
 
     test('sin horario no deja huecos ni escribe "Horario por confirmar"', () {

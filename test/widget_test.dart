@@ -14,7 +14,8 @@ void main() {
     await tester.pumpWidget(const ZaragozaCulturaApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Zaragoza Cultura'), findsOneWidget);
+    expect(find.textContaining('Bienvenid@ a'), findsOneWidget);
+    expect(find.textContaining('Maña Zaragoza'), findsOneWidget);
     expect(find.text('Actividades'), findsOneWidget);
     expect(find.text('Restaurantes'), findsOneWidget);
     expect(find.text('Sugerencia del día'), findsOneWidget);

@@ -91,20 +91,20 @@ APP_LANDING_PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zaragoza Cultura · La agenda cultural de Zaragoza</title>
-<meta property="og:title" content="Zaragoza Cultura">
+<title>Maña Zaragoza · La agenda cultural de Zaragoza</title>
+<meta property="og:title" content="Maña Zaragoza">
 <meta property="og:description" content="Todas las actividades culturales de Zaragoza en una app: música, teatro, exposiciones y más.">
 <meta property="og:type" content="website">
 <style>
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #10243e; background: #f8fafd; margin: 0; display: flex; min-height: 100vh; align-items: center; justify-content: center; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #0b2d4a; background: #f7f6ef; margin: 0; display: flex; min-height: 100vh; align-items: center; justify-content: center; }
   main { max-width: 480px; padding: 32px 24px; text-align: center; line-height: 1.5; }
   h1 { margin-bottom: .3rem; }
-  p { color: #425b71; }
+  p { color: #5b6b80; }
 </style>
 </head>
 <body>
 <main>
-<h1>Zaragoza Cultura</h1>
+<h1>Maña Zaragoza</h1>
 <p>Todas las actividades culturales de Zaragoza en una app: música, teatro, exposiciones y mucho más.</p>
 <p><strong>Muy pronto disponible.</strong></p>
 </main>
@@ -169,7 +169,7 @@ class EventHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(
-                b"Agenda Zaragoza Cultura backend. Use /events to fetch the JSON payload."
+                "Maña Zaragoza backend. Use /events to fetch the JSON payload.".encode("utf-8")
             )
             return
 

@@ -186,6 +186,16 @@ class ServerTests(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
+    def get(self, path):
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}{path}") as response:
+            return response.status, response.read().decode("utf-8")
+
+    def test_paginas_con_el_nombre_de_la_app(self):
+        for path in ("/", "/app", "/privacidad"):
+            status, body = self.get(path)
+            self.assertEqual(status, 200, path)
+            self.assertIn("Maña Zaragoza", body, path)
+
     def test_ruta_desconocida(self):
         self.assertEqual(self.post("/otra", b"{}")[0], 404)
 

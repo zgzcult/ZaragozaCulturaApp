@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'main.dart' show CulturalEvent;
+import 'brand.dart';
 
 /// Plaza del Pilar: punto de partida cuando no hay ubicación.
 const double zaragozaCenterLat = 41.6563;
@@ -337,7 +338,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 52, color: const Color(0xFF1E5F74)),
+            Icon(icon, size: 52, color: Brand.navy),
             const SizedBox(height: 16),
             Text(
               text,
@@ -434,13 +435,13 @@ class _NearbyScreenState extends State<NearbyScreen> {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: const Color(0xFF2463D9),
+      selectedColor: Brand.navy,
       backgroundColor: Colors.white,
       labelStyle: TextStyle(
         color: selected ? Colors.white : const Color(0xFF1D2939),
         fontWeight: FontWeight.w700,
       ),
-      side: const BorderSide(color: Color(0xFFE0E5EC)),
+      side: const BorderSide(color: Brand.line),
     );
   }
 
@@ -451,7 +452,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: const Color(0xFFEAF3F7),
+        color: Brand.skyTint,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
@@ -462,7 +463,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFBFD8E5)),
+              border: Border.all(color: Brand.skyLine),
             ),
             child: IntrinsicHeight(
               child: Row(
@@ -471,7 +472,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                   Container(
                     width: 6,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF1E5F74),
+                      color: Brand.navy,
                       borderRadius: BorderRadius.horizontal(
                         left: Radius.circular(14),
                       ),
@@ -489,7 +490,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                               fontSize: 16,
                               height: 1.25,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF10243E),
+                              color: Brand.navy,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -498,7 +499,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                               const Icon(
                                 Icons.calendar_today_outlined,
                                 size: 14,
-                                color: Color(0xFF1E5F74),
+                                color: Brand.navy,
                               ),
                               const SizedBox(width: 6),
                               Expanded(
@@ -519,7 +520,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                                 const Icon(
                                   Icons.access_time_rounded,
                                   size: 14,
-                                  color: Color(0xFF1E5F74),
+                                  color: Brand.navy,
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
@@ -540,7 +541,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
                   ),
                   const Padding(
                     padding: EdgeInsets.only(right: 10),
-                    child: Icon(Icons.chevron_right, color: Color(0xFF1E5F74)),
+                    child: Icon(Icons.chevron_right, color: Brand.navy),
                   ),
                 ],
               ),
@@ -591,7 +592,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E5F74),
+                color: Brand.navy,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: const [
@@ -615,7 +616,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
           height: 22,
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF2463D9),
+              color: Brand.navy,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 3),
               boxShadow: const [
@@ -781,7 +782,7 @@ class _NearbyScreenState extends State<NearbyScreen> {
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF10243E),
+                color: Brand.navy,
               ),
             ),
           ),

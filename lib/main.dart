@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:add_2_calendar/add_2_calendar.dart' as calendar;
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -9,13 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ads.dart';
-import 'day_suggestion.dart';
 import 'event_classifier.dart';
 import 'home.dart';
 import 'nearby.dart';
 import 'reminders.dart';
 import 'restaurants.dart';
+import 'splash.dart';
 import 'suggestion.dart';
+import 'brand.dart';
 
 const List<String> _eventsApiUrls = <String>[
   'https://zaragoza-cultura-app.onrender.com/events',
@@ -26,6 +29,12 @@ const List<String> _eventsApiUrls = <String>[
 const String _fallbackAssetPath = 'assets/sample_events.json';
 
 void main() {
+  // La licencia de la tipografía (SIL OFL) debe acompañar a la app: aparece en
+  // la pantalla de licencias de código abierto.
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Montserrat'], text);
+  });
   runApp(const ZaragozaCulturaApp());
 }
 
@@ -468,7 +477,7 @@ String buildShareText(CulturalEvent event) {
     '',
     // Primero el enlace a la app: es el primero que las apps de mensajería
     // usan para la vista previa.
-    'Descubre más actividades en Zaragoza Cultura: $_appShareUrl',
+    'Descubre más actividades en ${Brand.name}: $_appShareUrl',
     '',
     'Más información oficial: ${event.officialUrl}',
   ].join('\n');
@@ -677,28 +686,38 @@ class ZaragozaCulturaApp extends StatelessWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
   final PlacesRepository placesRepository;
-  final WeatherSource weatherSource;
 
   const ZaragozaCulturaApp({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
     this.locationService = const DeviceLocationService(),
     this.placesRepository = const HttpPlacesRepository(),
-    this.weatherSource = const HttpWeatherSource(),
   });
 
   @override
   Widget build(BuildContext context) {
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: Brand.navy,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: Brand.navy,
+          onPrimary: Colors.white,
+          secondary: Brand.coral,
+          onSecondary: Brand.navy,
+          tertiary: Brand.sky,
+          onTertiary: Brand.navy,
+          surface: Colors.white,
+          surfaceTint: Colors.transparent,
+        );
     return MaterialApp(
-      title: 'Zaragoza Cultura',
+      title: Brand.name,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F8FC),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E5F74),
-          brightness: Brightness.light,
-        ),
+        fontFamily: Brand.fontFamily,
+        scaffoldBackgroundColor: Brand.cream,
+        colorScheme: scheme,
         cardTheme: CardThemeData(
           elevation: 0,
           margin: EdgeInsets.zero,
@@ -707,17 +726,61 @@ class ZaragozaCulturaApp extends StatelessWidget {
           ),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1E5F74),
+          backgroundColor: Brand.navy,
           foregroundColor: Colors.white,
           centerTitle: true,
           elevation: 0,
+          titleTextStyle: TextStyle(
+            fontFamily: Brand.fontFamily,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          indicatorColor: Brand.skyTint,
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              fontSize: 12,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+              color: Brand.navy,
+            ),
+          ),
+          iconTheme: WidgetStateProperty.all(
+            const IconThemeData(color: Brand.navy),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Brand.coral,
+          foregroundColor: Brand.navy,
+        ),
+        switchTheme: SwitchThemeData(
+          trackColor: WidgetStateProperty.resolveWith(
+            (states) =>
+                states.contains(WidgetState.selected) ? Brand.coral : null,
+          ),
+          thumbColor: WidgetStateProperty.resolveWith(
+            (states) =>
+                states.contains(WidgetState.selected) ? Colors.white : null,
+          ),
+        ),
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: Brand.navy,
+          contentTextStyle: TextStyle(
+            fontFamily: Brand.fontFamily,
+            color: Colors.white,
+          ),
         ),
       ),
-      home: HomeScreen(
-        repository: repository,
-        locationService: locationService,
-        placesRepository: placesRepository,
-        weatherSource: weatherSource,
+      home: SplashScreen(
+        next: (_) => HomeScreen(
+          repository: repository,
+          locationService: locationService,
+          placesRepository: placesRepository,
+        ),
       ),
     );
   }
@@ -795,7 +858,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF10243E),
+                color: Brand.navy,
               ),
             ),
           ),
@@ -822,11 +885,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                  borderSide: const BorderSide(color: Brand.line),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+                  borderSide: const BorderSide(color: Brand.line),
                 ),
               ),
             ),
@@ -860,7 +923,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E5F74),
+                                color: Brand.navy,
                               ),
                             ),
                           ),
@@ -1115,7 +1178,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF10243E),
+                    color: Brand.navy,
                   ),
                 ),
               );
@@ -1130,7 +1193,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: Brand.cream,
       bottomNavigationBar: NavigationBar(
         selectedIndex: nearbyMode
             ? 1
@@ -1240,7 +1303,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                     style: const TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.w800,
-                                      color: Color(0xFF10243E),
+                                      color: Brand.navy,
                                     ),
                                   ),
                                 ),
@@ -1332,7 +1395,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                 selected: selectedCategory == category,
                                 onSelected: (_) =>
                                     setState(() => selectedCategory = category),
-                                selectedColor: const Color(0xFF2463D9),
+                                selectedColor: Brand.navy,
                                 backgroundColor: Colors.white,
                                 labelStyle: TextStyle(
                                   color: selectedCategory == category
@@ -1340,9 +1403,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                       : const Color(0xFF1D2939),
                                   fontWeight: FontWeight.w700,
                                 ),
-                                side: const BorderSide(
-                                  color: Color(0xFFE0E5EC),
-                                ),
+                                side: const BorderSide(color: Brand.line),
                               );
                             },
                           ),
@@ -1359,7 +1420,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w800,
-                                    color: Color(0xFF10243E),
+                                    color: Brand.navy,
                                   ),
                                 ),
                               ),
@@ -1476,7 +1537,7 @@ class _DateStripDelegate extends SliverPersistentHeaderDelegate {
     final cardHeight = 94 - (progress * 24);
     final numberSize = 24 - (progress * 7);
     return Container(
-      color: const Color(0xFFF8FAFD),
+      color: Brand.cream,
       padding: EdgeInsets.only(top: 8 - (progress * 4), bottom: 8, left: 20),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -1493,13 +1554,9 @@ class _DateStripDelegate extends SliverPersistentHeaderDelegate {
               height: cardHeight,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFF2463D9) : Colors.white,
+                color: selected ? Brand.navy : Colors.white,
                 borderRadius: BorderRadius.circular(progress > .5 ? 16 : 20),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFF2463D9)
-                      : const Color(0xFFE0E5EC),
-                ),
+                border: Border.all(color: selected ? Brand.navy : Brand.line),
                 boxShadow: selected
                     ? const [
                         BoxShadow(
@@ -1527,7 +1584,7 @@ class _DateStripDelegate extends SliverPersistentHeaderDelegate {
                     style: TextStyle(
                       fontSize: numberSize,
                       fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : const Color(0xFF10243E),
+                      color: selected ? Colors.white : Brand.navy,
                     ),
                   ),
                 ],
@@ -1577,7 +1634,7 @@ class EventCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE1E7EF)),
+        border: Border.all(color: Brand.line),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0D10243E),
@@ -1629,9 +1686,7 @@ class EventCard extends StatelessWidget {
                     style: IconButton.styleFrom(backgroundColor: Colors.white),
                     icon: Icon(
                       isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite
-                          ? const Color(0xFFE5484D)
-                          : const Color(0xFF66758A),
+                      color: isFavorite ? Brand.coral : const Color(0xFF66758A),
                     ),
                   ),
                 ),
@@ -1650,7 +1705,7 @@ class EventCard extends StatelessWidget {
                       fontSize: 20,
                       height: 1.15,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF10243E),
+                      color: Brand.navy,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1800,7 +1855,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF1E5F74), Color(0xFF2C7C9B)],
+                    colors: [Brand.navy, Brand.navyLight],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -1879,7 +1934,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: const Color(0xFFE4ECF4)),
+                  border: Border.all(color: Brand.line),
                 ),
                 child: Column(
                   children: [
@@ -1923,7 +1978,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _openMoreInfo,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E5F74),
+                    backgroundColor: Brand.navy,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -1944,8 +1999,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _share,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF1E5F74),
-                        side: const BorderSide(color: Color(0xFFB9D3E2)),
+                        foregroundColor: Brand.navy,
+                        side: const BorderSide(color: Brand.skyLine),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -1960,8 +2015,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _addToCalendar,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF1E5F74),
-                        side: const BorderSide(color: Color(0xFFB9D3E2)),
+                        foregroundColor: Brand.navy,
+                        side: const BorderSide(color: Brand.skyLine),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
@@ -1979,8 +2034,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 child: OutlinedButton.icon(
                   onPressed: onToggleFavorite,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF1E5F74),
-                    side: const BorderSide(color: Color(0xFFB9D3E2)),
+                    foregroundColor: Brand.navy,
+                    side: const BorderSide(color: Brand.skyLine),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -2069,7 +2124,7 @@ Color _categoryColor(CulturalCategory category) {
     case CulturalCategory.charlas:
       return const Color(0xFF6C757D);
     case CulturalCategory.eventos:
-      return const Color(0xFF1E5F74);
+      return Brand.navy;
   }
 }
 
@@ -2106,7 +2161,7 @@ class _EventImageState extends State<_EventImage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [color, Color.lerp(color, const Color(0xFF10243E), 0.65)!],
+          colors: [color, Color.lerp(color, Brand.navy, 0.65)!],
         ),
       ),
       alignment: Alignment.center,
@@ -2160,7 +2215,7 @@ class AboutScreen extends StatelessWidget {
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF10243E),
+              color: Brand.navy,
             ),
           ),
           const SizedBox(height: 6),
@@ -2187,7 +2242,7 @@ class AboutScreen extends StatelessWidget {
           children: [
             _section(
               'Aplicación no oficial',
-              'Zaragoza Cultura es una aplicación independiente. No está '
+              '${Brand.name} es una aplicación independiente. No está '
                   'patrocinada ni respaldada por el Ayuntamiento de Zaragoza.',
             ),
             _section(
@@ -2213,7 +2268,18 @@ class AboutScreen extends StatelessWidget {
               'Las imágenes proceden de la web del Ayuntamiento y pertenecen '
                   'a sus titulares. Cuando una actividad no tiene una imagen '
                   'propia se muestra una foto orientativa de Pexels '
-                  '(pexels.com), con el nombre de su autor.',
+                  '(pexels.com), con el nombre de su autor. Las fotos de la '
+                  'pantalla principal también son de Pexels (Anna Nekrashevich, '
+                  'David Vives y Misbaa Eri).',
+            ),
+            _section(
+              'Mapas y ubicación de los restaurantes',
+              'Los mapas son de OpenStreetMap (© colaboradores de '
+                  'OpenStreetMap). La ubicación de algunos restaurantes se '
+                  'calcula a partir de su dirección con CartoCiudad (Instituto '
+                  'Geográfico Nacional); el resto usa las coordenadas del '
+                  'Ayuntamiento de Zaragoza. Pueden tener pequeños errores: '
+                  'comprueba siempre la dirección.',
             ),
             OutlinedButton.icon(
               onPressed: () => launchUrl(
@@ -2222,6 +2288,15 @@ class AboutScreen extends StatelessWidget {
               ),
               icon: const Icon(Icons.gavel_outlined),
               label: const Text('Aviso legal del Ayuntamiento'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: Brand.name,
+              ),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('Licencias de código abierto'),
             ),
           ],
         ),
@@ -2386,11 +2461,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFE4ECF4)),
+        side: const BorderSide(color: Brand.line),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: Icon(icon, color: const Color(0xFF1E5F74)),
+        leading: Icon(icon, color: Brand.navy),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
@@ -2402,7 +2477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: Brand.cream,
       appBar: AppBar(title: const Text('Ajustes')),
       body: SafeArea(
         child: ListView(
@@ -2421,7 +2496,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Color(0xFFE4ECF4)),
+                side: const BorderSide(color: Brand.line),
               ),
               child: SwitchListTile(
                 contentPadding: const EdgeInsets.symmetric(
@@ -2430,7 +2505,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 secondary: const Icon(
                   Icons.notifications_active_outlined,
-                  color: Color(0xFF1E5F74),
+                  color: Brand.navy,
                 ),
                 title: const Text(
                   'Avisos de mis favoritos',
@@ -2449,17 +2524,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Color(0xFFE4ECF4)),
+                side: const BorderSide(color: Brand.line),
               ),
               child: SwitchListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 6,
                 ),
-                secondary: const Icon(
-                  Icons.my_location,
-                  color: Color(0xFF1E5F74),
-                ),
+                secondary: const Icon(Icons.my_location, color: Brand.navy),
                 title: const Text(
                   'Ubicación para «Cerca de mí»',
                   style: TextStyle(fontWeight: FontWeight.w700),

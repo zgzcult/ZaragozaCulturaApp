@@ -111,7 +111,7 @@ def send_email_resend(subject: str, text: str, reply_to: Optional[str] = None) -
         print(f"[WARN] Correo no enviado: falta la variable de entorno {', '.join(missing)}.")
         return False
     body: Dict[str, Any] = {
-        "from": os.environ.get("EMAIL_FROM", "Zaragoza Cultura <onboarding@resend.dev>"),
+        "from": os.environ.get("EMAIL_FROM", "Maña Zaragoza <onboarding@resend.dev>"),
         "to": [to],
         "subject": subject,
         "text": text,

@@ -46,6 +46,7 @@ dependencies:
   latlong2: ^0.10.1
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
 
@@ -69,6 +70,21 @@ flutter:
 
   assets:
     - assets/sample_events.json
+    - assets/home/
+    - assets/brand/
+    - assets/fonts/OFL.txt
+
+  # Tipografía de la marca: Montserrat (licencia SIL OFL, en assets/fonts/OFL.txt).
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -95,3 +111,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Icono de la aplicación (se genera con: dart run flutter_launcher_icons).
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icon_src/icon.png"
+  adaptive_icon_background: "#F7F6EF"
+  adaptive_icon_foreground: "assets/icon_src/icon_foreground.png"
+  min_sdk_android: 24

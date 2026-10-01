@@ -8,6 +8,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'brand.dart';
+
 class AdConfig {
   static const bool enabled = false;
 
@@ -45,7 +47,7 @@ class AdSlot extends StatelessWidget {
       height: 100,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF3F8),
+        color: Brand.skyTint,
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Text(

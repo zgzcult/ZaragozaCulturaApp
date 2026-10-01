@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import 'brand.dart';
+
 /// Dirección del servidor que recibe los envíos.
 const String _submitUrl = 'https://zaragoza-cultura-app.onrender.com/submit';
 
@@ -146,11 +148,11 @@ class _SuggestionScreenState extends State<SuggestionScreen> {
       fillColor: Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+        borderSide: const BorderSide(color: Brand.line),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFFE0E5EC)),
+        borderSide: const BorderSide(color: Brand.line),
       ),
     );
   }
@@ -158,7 +160,7 @@ class _SuggestionScreenState extends State<SuggestionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: Brand.cream,
       appBar: AppBar(title: const Text('Sugerir mejoras')),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -231,7 +233,7 @@ class _SuggestionScreenState extends State<SuggestionScreen> {
                     onPressed: _sending ? null : _send,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: const Color(0xFF1E5F74),
+                      backgroundColor: Brand.navy,
                     ),
                     icon: _sending
                         ? const SizedBox(

@@ -27,17 +27,23 @@ def raw(**overrides):
 
 
 class UtmTests(unittest.TestCase):
-    def test_coincide_con_pyproj(self):
-        # Valores calculados con pyproj (EPSG:25830 -> EPSG:4326).
-        for (east, north), (lat, lng) in {
-            (676934.75, 4613880.67): (41.657043, -0.874992),
-            (671271.45, 4615302.48): (41.671079, -0.942558),
-            (675000.0, 4612000.0): (41.640542, -0.898763),
-            (680000.0, 4618000.0): (41.693434, -0.836961),
-        }.items():
-            got = places.utm_to_latlng(east, north)
-            self.assertAlmostEqual(got[0], lat, places=5)
-            self.assertAlmostEqual(got[1], lng, places=5)
+    def test_ed50_coincide_con_pyproj(self):
+        # Valores de referencia calculados con pyproj (EPSG:23030 -> EPSG:4326).
+        referencia = {
+            (671271.45, 4615302.48): (41.6692157, -0.9439177),
+            (676934.75, 4613880.67): (41.6551808, -0.8763531),
+            (675000.0, 4612000.0): (41.6386796, -0.9001241),
+        }
+        for (east, north), (lat, lng) in referencia.items():
+            got = places.ed50_utm_to_latlng(east, north)
+            metros = (((got[0] - lat) * 111000) ** 2 + ((got[1] - lng) * 83000) ** 2) ** 0.5
+            self.assertLess(metros, 1.0, (east, north, got))
+
+    def test_museo_del_foro_coincide_con_el_otro_conjunto_de_datos(self):
+        # La agenda cultural da ese museo en (41.655183, -0.876353).
+        lat, lng = places.ed50_utm_to_latlng(676934.75, 4613880.67)
+        self.assertAlmostEqual(lat, 41.655183, places=4)
+        self.assertAlmostEqual(lng, -0.876353, places=4)
 
 
 class NameTests(unittest.TestCase):
@@ -60,7 +66,8 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(place["name"], "El Cachirulo")
         self.assertEqual(place["address"], "Ctra. de Logroño Km. 1,500, 50011")
         self.assertEqual(place["phone"], "976 460 146")
-        self.assertEqual((place["lat"], place["lng"]), (41.671079, -0.942558))
+        self.assertAlmostEqual(place["lat"], 41.669216, places=4)
+        self.assertAlmostEqual(place["lng"], -0.943918, places=4)
         self.assertEqual(place["source"], "ayuntamiento")
 
     def test_sin_coordenadas_se_guarda_para_la_lista(self):
@@ -149,6 +156,169 @@ class SaveTests(unittest.TestCase):
         col = FakeCollection([f"r{i}" for i in range(1000)])
         places.save("restaurante", fresh([f"r{i}" for i in range(250)]), col)
         self.assertEqual(len(col.docs), 1000)
+
+
+class CleanAddressTests(unittest.TestCase):
+    def test_abreviaturas(self):
+        self.assertEqual(places.clean_address("C/ Madre Vedruna, 10"), "Calle Madre Vedruna 10")
+        self.assertEqual(places.clean_address("Avda. Salvador Allende, 75"), "Avenida Salvador Allende 75")
+        self.assertEqual(places.clean_address("Pº de la Noria, 3"), "Paseo de la Noria 3")
+        self.assertEqual(places.clean_address("Ctra. de Logroño Km. 1,500"), "Carretera de Logroño Km. 1 500")
+
+    def test_tipo_de_via_entre_parentesis(self):
+        self.assertEqual(places.clean_address("Gertrudis Gomez Avellaneda (Avenida), 43"), "Avenida Gertrudis Gomez Avellaneda 43")
+        self.assertEqual(places.clean_address("San Francisco (Plaza), 09 (esquina Andres Piquer)"), "Plaza San Francisco 9")
+
+    def test_quita_esquinas_locales_y_centros_comerciales(self):
+        self.assertEqual(places.clean_address("C/ Duquesa Villahermosa, 42 (esquina C/ Delicias)"), "Calle Duquesa Villahermosa 42")
+        self.assertEqual(places.clean_address("C/ Coso, 35 - CC. Puerta Cinegia, planta 1ª, puestos 17 y 18"), "Calle Coso 35")
+        self.assertEqual(places.clean_address("La Ventana Indiscreta, 8, local"), "La Ventana Indiscreta 8")
+
+    def test_rangos_y_sin_numero(self):
+        self.assertEqual(places.clean_address("C/ Bruil, 4-6"), "Calle Bruil 4")
+        self.assertEqual(places.clean_address("C/ Mayor s/n"), "Calle Mayor")
+        self.assertEqual(places.clean_address(""), "")
+
+
+def portal(address="CALLE BRUIL, JUAN 4", lat=41.6485, lng=-0.8837, **extra):
+    data = {"type": "portal", "address": address, "muni": "Zaragoza", "lat": lat, "lng": lng, "noNumber": False}
+    data.update(extra)
+    return data
+
+
+class GeocodeTests(unittest.TestCase):
+    def test_acepta_un_portal_correcto(self):
+        self.assertEqual(places.geocode_address("C/ Bruil, 4-6", "50001", lambda q: portal()), (41.6485, -0.8837))
+
+    def test_rechaza_otra_ciudad(self):
+        far = portal(muni="Madrid", lat=40.4, lng=-3.7)
+        self.assertIsNone(places.geocode_address("C/ Bruil, 4", "50001", lambda q: far))
+
+    def test_rechaza_coordenadas_fuera_de_zaragoza_aunque_diga_zaragoza(self):
+        self.assertIsNone(places.geocode_address("C/ Bruil, 4", "50001", lambda q: portal(lat=40.4, lng=-3.7)))
+
+    def test_rechaza_calle_distinta_a_la_pedida(self):
+        self.assertIsNone(places.geocode_address("C/ Bruil, 4", "50001", lambda q: portal(address="PRUDENCIO")))
+
+    def test_rechaza_resultados_que_no_son_un_portal(self):
+        self.assertIsNone(places.geocode_address("C/ Bruil, 4", "50001", lambda q: portal(type="callejero")))
+        self.assertIsNone(places.geocode_address("C/ Bruil", "50001", lambda q: portal(noNumber=True)))
+
+    def test_prueba_sin_codigo_postal_si_falla_con_el_(self):
+        queries = []
+
+        def find(q):
+            queries.append(q)
+            return portal() if "50099" not in q else None
+
+        self.assertIsNotNone(places.geocode_address("C/ Bruil, 4", "50099", find))
+        self.assertEqual(len(queries), 2)
+
+
+def sin_ubicacion(street, postal="50001", pid="1"):
+    return {"id": f"restaurante-{pid}", "street": street, "postal": postal, "lat": None, "lng": None, "locSource": ""}
+
+
+class FindTests(unittest.TestCase):
+    class FakeResponse:
+        def __init__(self, body):
+            self.body = body
+
+        def read(self):
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def call(self, body):
+        from unittest import mock
+
+        with mock.patch.object(places.urllib.request, "urlopen", return_value=self.FakeResponse(body)):
+            return places.cartociudad_find("Calle Inventada 1, Zaragoza")
+
+    def test_cuerpo_vacio_es_sin_resultado_y_no_un_error(self):
+        self.assertIsNone(self.call(b""))
+        self.assertIsNone(self.call(b"  \n"))
+
+    def test_respuesta_no_json_es_sin_resultado(self):
+        self.assertIsNone(self.call(b"<html>error</html>"))
+
+    def test_respuesta_valida(self):
+        self.assertEqual(self.call(b'{"lat": 41.6, "lng": -0.9, "type": "portal"}')["type"], "portal")
+
+    def test_los_errores_de_red_siguen_siendo_errores(self):
+        from unittest import mock
+
+        with mock.patch.object(places.urllib.request, "urlopen", side_effect=OSError("sin red")):
+            with self.assertRaises(OSError):
+                places.cartociudad_find("x")
+
+
+class GeocodePlacesTests(unittest.TestCase):
+    def setUp(self):
+        self.calls = []
+
+    def find(self, q):
+        self.calls.append(q)
+        return portal()
+
+    def run_geo(self, items, cache=None, **kw):
+        return places.geocode_places(items, {} if cache is None else cache, find=self.find, pause=lambda _: None, **kw)
+
+    def test_ubica_los_que_no_tienen_coordenadas(self):
+        items = [sin_ubicacion("C/ Bruil, 4")]
+        stats = self.run_geo(items)
+        self.assertEqual((items[0]["lat"], items[0]["lng"]), (41.6485, -0.8837))
+        self.assertEqual(items[0]["locSource"], "cartociudad")
+        self.assertEqual(stats["placed"], 1)
+
+    def test_no_toca_los_que_ya_tienen_coordenadas(self):
+        item = {"id": "a", "street": "C/ Bruil, 4", "postal": "50001", "lat": 41.7, "lng": -0.9, "locSource": "ayuntamiento"}
+        self.run_geo([item])
+        self.assertEqual(self.calls, [])
+        self.assertEqual(item["lat"], 41.7)
+
+    def test_usa_la_cache_y_no_repite_consultas(self):
+        cache = {}
+        self.run_geo([sin_ubicacion("C/ Bruil, 4")], cache)
+        first = len(self.calls)
+        again = [sin_ubicacion("C/ Bruil, 4", pid="2")]
+        stats = self.run_geo(again, cache)
+        self.assertEqual(len(self.calls), first)
+        self.assertEqual(stats["from_cache"], 1)
+        self.assertEqual(again[0]["lat"], 41.6485)
+
+    def test_los_no_encontrados_se_guardan_y_se_reintentan_a_los_30_dias(self):
+        cache = {}
+        nothing = lambda q: None
+        items = [sin_ubicacion("C/ Inventada, 1")]
+        now = places.datetime(2026, 10, 1, tzinfo=places.timezone.utc)
+        places.geocode_places(items, cache, find=nothing, pause=lambda _: None, now=now)
+        self.assertEqual(len(cache), 1)
+        calls = []
+        places.geocode_places(items, cache, find=lambda q: calls.append(q), pause=lambda _: None, now=now + places.timedelta(days=5))
+        self.assertEqual(calls, [])  # aún no toca reintentar
+        places.geocode_places(items, cache, find=lambda q: calls.append(q), pause=lambda _: None, now=now + places.timedelta(days=31))
+        self.assertTrue(calls)  # ya sí
+
+    def test_un_fallo_de_red_no_se_guarda_en_la_cache(self):
+        def broken(q):
+            raise OSError("sin conexión")
+
+        cache = {}
+        items = [sin_ubicacion("C/ Bruil, 4")]
+        stats = places.geocode_places(items, cache, find=broken, pause=lambda _: None)
+        self.assertEqual(stats["errors"], 1)
+        self.assertEqual(cache, {})
+        self.assertIsNone(items[0]["lat"])
+
+    def test_limita_el_numero_de_consultas(self):
+        items = [sin_ubicacion(f"C/ Bruil, {n}", pid=str(n)) for n in range(1, 8)]
+        stats = self.run_geo(items, max_calls=3)
+        self.assertEqual(stats["calls"], 3)
 
 
 if __name__ == "__main__":
