@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zaragoza_cultura_app/brand.dart';
 import 'package:zaragoza_cultura_app/home.dart';
 import 'package:zaragoza_cultura_app/main.dart';
-import 'package:zaragoza_cultura_app/splash.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -117,82 +116,47 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  group('Bienvenida animada', () {
-    Widget app({Duration duration = const Duration(milliseconds: 2900)}) =>
-        MaterialApp(
-          home: SplashScreen(
-            duration: duration,
-            next: (_) => const Scaffold(body: Text('PANTALLA PRINCIPAL')),
-          ),
-        );
-
-    testWidgets('muestra el nombre y pasa sola a la pantalla principal', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app());
-      await tester.pump(const Duration(milliseconds: 1800));
-      expect(find.text('Maña'), findsOneWidget);
-      expect(find.text('ZARAGOZA'), findsOneWidget);
-      expect(find.text('PANTALLA PRINCIPAL'), findsNothing);
-
-      await tester.pumpAndSettle();
-      expect(find.text('PANTALLA PRINCIPAL'), findsOneWidget);
-      expect(find.text('Maña'), findsNothing);
-    });
-
-    testWidgets('el logo aparece desvanecido y crece al empezar', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app());
-      await tester.pump(const Duration(milliseconds: 50));
-      final early = tester.widget<Opacity>(
-        find
-            .ancestor(of: find.byType(Image), matching: find.byType(Opacity))
-            .first,
-      );
-      expect(early.opacity, lessThan(0.5));
-      await tester.pump(const Duration(milliseconds: 1200));
-      final later = tester.widget<Opacity>(
-        find
-            .ancestor(of: find.byType(Image), matching: find.byType(Opacity))
-            .first,
-      );
-      expect(later.opacity, 1.0);
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('un toque la salta', (tester) async {
-      await tester.pumpWidget(app());
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byType(SplashScreen));
-      await tester.pumpAndSettle();
-      expect(find.text('PANTALLA PRINCIPAL'), findsOneWidget);
-    });
-
-    testWidgets('con «reducir animaciones» dura mucho menos', (tester) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(disableAnimations: true),
-          child: app(),
+  test('Android muestra el logo sobre crema mientras arranca', () {
+    final res = 'android/app/src/main/res';
+    expect(
+      File('$res/values/colors.xml').readAsStringSync(),
+      contains('<color name="splash_background">#F7F6EF</color>'),
+    );
+    for (final v in ['drawable', 'drawable-v21']) {
+      expect(
+        File('$res/$v/launch_background.xml').readAsStringSync(),
+        allOf(
+          contains('@color/splash_background'),
+          contains('@drawable/splash_logo'),
         ),
+        reason: v,
       );
-      await tester.pump(const Duration(milliseconds: 700));
-      await tester.pumpAndSettle();
-      expect(find.text('PANTALLA PRINCIPAL'), findsOneWidget);
-    });
+    }
+    for (final v in ['values-v31', 'values-night-v31']) {
+      expect(
+        File('$res/$v/styles.xml').readAsStringSync(),
+        allOf(
+          contains('windowSplashScreenBackground'),
+          contains('@drawable/splash_icon'),
+        ),
+        reason: v,
+      );
+    }
+    for (final d in ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      expect(File('$res/drawable-$d/splash_logo.png').existsSync(), isTrue);
+      expect(File('$res/drawable-$d/splash_icon.png').existsSync(), isTrue);
+    }
   });
 
-  testWidgets(
-    'La aplicación arranca con la bienvenida y llega a la principal',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.pumpWidget(const ZaragozaCulturaApp());
-      await tester.pump(const Duration(milliseconds: 900));
-      expect(find.byType(SplashScreen), findsOneWidget);
-      await tester.pumpAndSettle();
-      expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.textContaining('Bienvenid@ a'), findsOneWidget);
-      expect(find.textContaining('Maña Zaragoza'), findsOneWidget);
-    },
-  );
+  testWidgets('La aplicación arranca directamente en la pantalla principal', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const ZaragozaCulturaApp());
+    // Sin animación previa: la pantalla principal está desde el primer frame.
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.textContaining('Bienvenid@ a'), findsOneWidget);
+    expect(find.textContaining('Maña Zaragoza'), findsOneWidget);
+    await tester.pumpAndSettle();
+  });
 }

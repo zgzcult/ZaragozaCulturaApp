@@ -212,6 +212,32 @@ void main() {
     });
   });
 
+  testWidgets('Ajustes se abre desde la pantalla principal', (tester) async {
+    SharedPreferences.setMockInitialValues({'reminders_enabled': true});
+    await tester.binding.setSurfaceSize(const Size(400, 2000));
+    await tester.pumpWidget(const ZaragozaCulturaApp(repository: _Repo()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ajustes'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
+    // Refleja que los avisos estaban activados.
+    final reminders = tester.widget<SwitchListTile>(
+      find.byType(SwitchListTile).first,
+    );
+    expect(reminders.value, isTrue);
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  test('desactivar los avisos lo guarda en el teléfono', () async {
+    SharedPreferences.setMockInitialValues({'reminders_enabled': true});
+    expect(await loadRemindersEnabled(), isTrue);
+    expect(
+      await setFavoriteReminders(false, repository: const _Repo()),
+      isTrue,
+    );
+    expect(await loadRemindersEnabled(), isFalse);
+  });
+
   testWidgets(
     'La agenda ya no muestra el aviso de origen al final de la lista',
     (tester) async {

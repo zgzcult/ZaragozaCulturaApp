@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Lugares de interés (restaurantes...) desde los datos abiertos del Ayuntamiento.
+"""Lugares de interés (restaurantes, monumentos y museos) desde los datos
+abiertos del Ayuntamiento.
 
-Descarga el listado de restaurantes de zaragoza.es/sede/servicio/restaurante,
+Descarga los listados de zaragoza.es/sede/servicio/restaurante y /monumento,
 convierte sus coordenadas (UTM ED50) a latitud/longitud y los guarda en MongoDB
 (colección `places`) para que el servidor los entregue a la app.
 
@@ -15,6 +16,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import os
@@ -31,7 +33,9 @@ PAGE_SIZE = 500  # máximo que devuelve la API por petición
 HEADERS = {"User-Agent": "ZaragozaCulturaApp/1.0", "Accept": "application/json"}
 
 KINDS = {
-    "restaurante": {"endpoint": "restaurante", "prefix": "restaurante"},
+    # min: si se descargan menos, algo ha fallado y no se guarda nada.
+    "restaurante": {"endpoint": "restaurante", "prefix": "restaurante", "min": 200},
+    "monumento": {"endpoint": "monumento", "prefix": "monumento", "min": 100},
 }
 
 
@@ -168,7 +172,8 @@ def normalize_place(kind: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
     lat, lng = _coordinates(raw)
 
-    street = _text(raw.get("streetAddress"))
+    # Restaurantes: «streetAddress»; monumentos: «address».
+    street = _text(raw.get("streetAddress")) or _text(raw.get("address"))
     postal = _text(raw.get("postalCode"))
     address = ", ".join(p for p in (street, postal) if p)
     if lat is None and not street:
@@ -178,7 +183,7 @@ def normalize_place(kind: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     url = _text(raw.get("url"))
     if url and not re.match(r"https?://", url, re.I):
         url = ""
-    return {
+    place = {
         "id": f"{KINDS[kind]['prefix']}-{raw.get('id')}",
         "type": kind,
         "name": name,
@@ -192,6 +197,96 @@ def normalize_place(kind: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "lng": lng,
         "source": "ayuntamiento",
         "lastUpdated": datetime.now(timezone.utc).isoformat(),
+    }
+    if kind == "monumento":
+        place.update(monument_details(raw))
+    return place
+
+
+# ---------------------------------------------------------------------------
+# Monumentos y museos
+# ---------------------------------------------------------------------------
+
+
+def html_to_text(value: Any) -> str:
+    """Texto legible a partir del HTML de las fichas: párrafos y listas como
+    saltos de línea, sin etiquetas ni imágenes. No cambia la redacción."""
+    if not isinstance(value, str):
+        return ""
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"<\s*br\s*/?>", "\n", text, flags=re.I)
+    text = re.sub(r"<\s*li[^>]*>", "\n• ", text, flags=re.I)
+    text = re.sub(r"</\s*li\s*>", "", text, flags=re.I)
+    text = re.sub(r"</\s*(p|ul|h\d)\s*>", "\n", text, flags=re.I)
+    text = re.sub(r"<\s*(p|ul|h\d)[^>]*>", "\n", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text).replace("\xa0", " ")
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    text = "\n".join(lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+# Grupos de estilo para los filtros de la app, a partir del campo «estilo»
+# («barroco, neoclasico», «contemporaneo: historicismo Neomudéjar»...).
+STYLE_GROUPS = [
+    ("Romano", ("romano",)),
+    ("Medieval", ("romanico", "gotico", "bajomedieval", "medieval")),
+    ("Mudéjar", ("mudejar",)),
+    ("Renacentista", ("renacentista",)),
+    ("Barroco", ("barroco",)),
+    ("Neoclásico", ("neoclasico",)),
+    ("Modernista", ("modernista",)),
+    ("Contemporáneo", ("contemporaneo", "comtemporaneo", "historicismo", "regionalista", "racionalista", "eclecticismo")),
+    ("Actual", ("actual",)),
+    ("Naturaleza", ("entorno",)),
+]
+
+
+def _fold(text: str) -> str:
+    text = text.lower()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ü", "u")):
+        text = text.replace(a, b)
+    return text
+
+
+def style_groups(estilo: str) -> List[str]:
+    """«barroco, neoclasico» -> ["Barroco", "Neoclásico"]. «Neomudéjar» dentro
+    de un historicismo cuenta como contemporáneo, no como mudéjar."""
+    folded = _fold(estilo or "")
+    words = set(re.findall(r"[a-zñ]+", folded))
+    groups = []
+    for label, keys in STYLE_GROUPS:
+        if any(key in words for key in keys):
+            groups.append(label)
+    return groups
+
+
+def https_url(value: Any) -> str:
+    url = _text(value)
+    if url.startswith("http://www.zaragoza.es/"):
+        url = "https://" + url[len("http://"):]
+    return url if url.startswith("https://") else ""
+
+
+def monument_details(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Campos propios de un monumento: textos oficiales (sin HTML), época,
+    estilo, foto y página oficial del Ayuntamiento."""
+    estilo = _text(raw.get("estilo"))
+    title = _text(raw.get("title"))
+    tel = raw.get("phone")
+    return {
+        "description": html_to_text(raw.get("description")),
+        "horario": html_to_text(raw.get("horario")),
+        "price": html_to_text(raw.get("price")),
+        "datacion": _text(raw.get("datacion")),
+        "estilo": estilo,
+        "styles": style_groups(estilo),
+        "museum": bool(re.search(r"\bmuseo\b|caixaforum", title, re.I)),
+        "top": raw.get("top") == "S",
+        "image": https_url(raw.get("image")),
+        "url": https_url(raw.get("uri")),
+        "phone": _text(tel) if isinstance(tel, str) else "",
     }
 
 
@@ -394,7 +489,7 @@ def save(kind: str, places: List[Dict[str, Any]], collection) -> None:
         collection.update_one({"id": place["id"]}, {"$set": place}, upsert=True)
     print(f"[OK] {len(places)} lugares '{kind}' guardados.")
 
-    if len(places) < 200:
+    if len(places) < KINDS[kind]["min"]:
         print("[INFO] Limpieza omitida: se descargaron pocos lugares.")
         return
     fresh = {p["id"] for p in places}
@@ -427,7 +522,7 @@ def main() -> int:
             for place in places[:3]:
                 print("  ", place["name"], "|", place["address"], "|", place["lat"], place["lng"])
             continue
-        if len(places) < 200:
+        if len(places) < KINDS[kind]["min"]:
             print(f"[ERROR] Demasiado pocos lugares '{kind}'; no se guarda nada.", file=sys.stderr)
             return 1
         from pymongo import MongoClient

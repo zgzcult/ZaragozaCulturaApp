@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from pymongo import MongoClient
 
+import services
 import submissions
 
 # Configuración de MongoDB
@@ -51,13 +52,21 @@ def get_events_from_db(days=None):
         raise RuntimeError(f"Error conectando a MongoDB: {exc}")
 
 
-PLACE_KINDS = {"restaurante"}
-PLACES_CACHE_SECONDS = 6 * 3600
+_BASE_PLACE_FIELDS = ("id", "name", "address", "phone", "url", "lat", "lng")
+# Campos que se envían a la app de cada tipo de lugar.
+PLACE_FIELDS = {
+    "restaurante": _BASE_PLACE_FIELDS,
+    "monumento": _BASE_PLACE_FIELDS
+    + ("description", "horario", "price", "datacion", "estilo", "styles", "museum", "top", "image"),
+}
+PLACE_KINDS = set(PLACE_FIELDS)
+PLACES_CACHE_SECONDS = 30 * 60  # los datos cambian cada dos días; así se ven pronto
 _places_cache = {}
 
 
 def get_places_payload(kind):
-    """Lugares de un tipo (restaurantes...) en JSON compacto, con caché de 6 h."""
+    """Lugares de un tipo (restaurantes, monumentos) en JSON compacto, con
+    caché de 30 minutos."""
     hit = _places_cache.get(kind)
     if hit and time.time() - hit[0] < PLACES_CACHE_SECONDS:
         return hit[1]
@@ -65,13 +74,31 @@ def get_places_payload(kind):
         raise RuntimeError("MONGODB_URI no está configurada en las variables de entorno")
     try:
         client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-        fields = {"_id": 0, "id": 1, "name": 1, "address": 1, "phone": 1, "url": 1, "lat": 1, "lng": 1}
+        fields = {"_id": 0, **{name: 1 for name in PLACE_FIELDS[kind]}}
         places = list(client["zaragoza_cultura"]["places"].find({"type": kind}, fields))
         client.close()
     except Exception as exc:
         raise RuntimeError(f"Error conectando a MongoDB: {exc}")
     payload = json.dumps(places, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     _places_cache[kind] = (time.time(), payload)
+    return payload
+
+
+SERVICES_CACHE_SECONDS = 30 * 60  # las farmacias de guardia cambian a diario
+_services_cache = {}
+
+
+def get_services_payload(collect=None):
+    """Servicios útiles en JSON compacto. Si algún grupo falló, se guarda en
+    caché solo 5 minutos para reintentarlo pronto."""
+    hit = _services_cache.get("all")
+    if hit and time.time() < hit[0]:
+        return hit[1]
+    data = (collect or services.collect_services)()
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    failed = any(group.get("error") for group in data["groups"])
+    ttl = 5 * 60 if failed else SERVICES_CACHE_SECONDS
+    _services_cache["all"] = (time.time() + ttl, payload)
     return payload
 
 
@@ -210,6 +237,24 @@ class EventHandler(BaseHTTPRequestHandler):
                 return
             try:
                 payload = get_places_payload(kind)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                if "gzip" in self.headers.get("Accept-Encoding", ""):
+                    payload = gzip.compress(payload, compresslevel=6)
+                    self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+
+        if url.path == "/services":
+            try:
+                payload = get_services_payload()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 if "gzip" in self.headers.get("Accept-Encoding", ""):

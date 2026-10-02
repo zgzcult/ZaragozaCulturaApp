@@ -16,9 +16,9 @@ import 'home.dart';
 import 'nearby.dart';
 import 'reminders.dart';
 import 'restaurants.dart';
-import 'splash.dart';
 import 'suggestion.dart';
 import 'brand.dart';
+import 'ui_kit.dart';
 
 const List<String> _eventsApiUrls = <String>[
   'https://zaragoza-cultura-app.onrender.com/events',
@@ -667,6 +667,44 @@ class ZaragozaEventsRepository {
   }
 }
 
+/// ¿Están activados los avisos de favoritos?
+Future<bool> loadRemindersEnabled() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_remindersKey) ?? false;
+}
+
+/// Activa o desactiva los avisos de favoritos desde Ajustes. Al activar pide
+/// el permiso de notificaciones y programa los avisos con los favoritos y la
+/// agenda guardados en el teléfono. Devuelve si el cambio se pudo hacer.
+Future<bool> setFavoriteReminders(
+  bool enabled, {
+  ZaragozaEventsRepository repository = const ZaragozaEventsRepository(),
+  ReminderService? service,
+}) async {
+  final reminders = service ?? ReminderService();
+  if (enabled && !await reminders.requestPermission()) return false;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_remindersKey, enabled);
+  if (!enabled) {
+    await reminders.cancelAll();
+    return true;
+  }
+  final favorites = await FavoritesStorage().load();
+  final events = await repository.loadCached();
+  final candidates = [
+    for (final e in events)
+      if (favorites.contains(e.id))
+        ReminderCandidate(
+          title: e.title,
+          date: e.date,
+          timeLabel: _eventTimeLabel(e),
+          place: e.place,
+        ),
+  ];
+  await reminders.sync(planReminders(candidates, now: DateTime.now()));
+  return true;
+}
+
 class FavoritesStorage {
   static const String _favoritesKey = 'favorite_event_ids';
 
@@ -775,12 +813,10 @@ class ZaragozaCulturaApp extends StatelessWidget {
           ),
         ),
       ),
-      home: SplashScreen(
-        next: (_) => HomeScreen(
-          repository: repository,
-          locationService: locationService,
-          placesRepository: placesRepository,
-        ),
+      home: HomeScreen(
+        repository: repository,
+        locationService: locationService,
+        placesRepository: placesRepository,
       ),
     );
   }
@@ -953,23 +989,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
         )
         .toList();
     await _reminderService.sync(planReminders(candidates, now: DateTime.now()));
-  }
-
-  /// Activa o desactiva los avisos. Devuelve si el cambio se pudo hacer
-  /// (al activar hace falta el permiso de notificaciones).
-  Future<bool> _setReminders(bool enabled) async {
-    if (enabled && !await _reminderService.requestPermission()) {
-      return false;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_remindersKey, enabled);
-    _remindersEnabled = enabled;
-    if (enabled) {
-      await _syncReminders();
-    } else {
-      await _reminderService.cancelAll();
-    }
-    return true;
   }
 
   @override
@@ -1195,6 +1214,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
     return Scaffold(
       backgroundColor: Brand.cream,
       bottomNavigationBar: NavigationBar(
+        // Ajustes está en la pantalla principal: son ajustes de toda la app.
         selectedIndex: nearbyMode
             ? 1
             : searchMode
@@ -1225,17 +1245,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
               searchMode = false;
               nearbyMode = false;
             });
-          } else if (index == 4) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SettingsScreen(
-                  remindersEnabled: _remindersEnabled,
-                  onRemindersChanged: _setReminders,
-                  locationService: widget.locationService,
-                ),
-              ),
-            );
           }
         },
         destinations: const [
@@ -1255,14 +1264,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
             selectedIcon: Icon(Icons.favorite),
             label: 'Favoritos',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            label: 'Ajustes',
-          ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SafeArea(child: SkeletonList())
           : nearbyMode
           ? NearbyScreen(
               events: _events,
@@ -1613,7 +1618,43 @@ String _weekdayShort(DateTime date) {
   ][date.weekday - 1];
 }
 
-class EventCard extends StatelessWidget {
+/// Etiqueta de la imagen compartida entre la tarjeta y la ficha (transición
+/// Hero). La tarjeta la deja preparada justo antes de abrir la ficha y la
+/// ficha la recoge al crearse; así cada tarjeta tiene la suya aunque una
+/// actividad aparezca varias veces.
+class EventHeroTag {
+  const EventHeroTag._();
+
+  static Object? _pending;
+
+  static void _prepare(Object tag) {
+    _pending = tag;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pending = null);
+  }
+
+  static Object? _take() {
+    final tag = _pending;
+    _pending = null;
+    return tag;
+  }
+}
+
+const List<String> _monthShort = <String>[
+  'ENE',
+  'FEB',
+  'MAR',
+  'ABR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AGO',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DIC',
+];
+
+class EventCard extends StatefulWidget {
   final CulturalEvent event;
   final bool isFavorite;
   final VoidCallback onFavorite;
@@ -1628,93 +1669,115 @@ class EventCard extends StatelessWidget {
   });
 
   @override
+  State<EventCard> createState() => _EventCardState();
+}
+
+class _EventCardState extends State<EventCard> {
+  final Object _heroTag = Object();
+
+  void _open() {
+    EventHeroTag._prepare(_heroTag);
+    widget.onOpen();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final event = widget.event;
+    final date = DateTime.tryParse(event.date);
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Brand.line),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x0D10243E),
-            blurRadius: 14,
-            offset: Offset(0, 5),
+            color: Color(0x1A0B2D4A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onOpen,
+        onTap: _open,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Stack(
-              children: [
-                SizedBox(
-                  height: 168,
-                  width: double.infinity,
-                  child: _EventImage(event: event),
-                ),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
+            SizedBox(
+              height: 210,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Hero(
+                    tag: _heroTag,
+                    child: _EventImage(event: event),
+                  ),
+                  // Degradado para que el título se lea sobre cualquier foto.
+                  const DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _categoryLabel(event.category),
-                      style: TextStyle(
-                        color: _categoryColor(event.category),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.0, 0.35, 1.0],
+                        colors: [
+                          Color(0x330B2D4A),
+                          Color(0x000B2D4A),
+                          Color(0xE60B2D4A),
+                        ],
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    onPressed: onFavorite,
-                    style: IconButton.styleFrom(backgroundColor: Colors.white),
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite ? Brand.coral : const Color(0xFF66758A),
+                  if (date != null)
+                    Positioned(top: 12, left: 12, child: _DateTag(date: date)),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: FavoriteHeart(
+                      isFavorite: widget.isFavorite,
+                      onPressed: widget.onFavorite,
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 14,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CategoryPill(category: event.category),
+                        const SizedBox(height: 8),
+                        Text(
+                          event.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            height: 1.15,
+                            fontWeight: FontWeight.w700,
+                            shadows: [
+                              Shadow(color: Color(0x660B2D4A), blurRadius: 8),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    event.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      color: Brand.navy,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   if (event.timeSlots.isNotEmpty) ...[
                     _InfoRow(
                       icon: Icons.access_time_rounded,
                       text: _eventTimeLabel(event),
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 6),
                   ],
                   _InfoRow(
                     icon: Icons.location_on_outlined,
@@ -1727,6 +1790,86 @@ class EventCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Fecha en una pequeña etiqueta blanca: día grande y mes abreviado.
+class _DateTag extends StatelessWidget {
+  final DateTime date;
+
+  const _DateTag({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 50,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${date.day}',
+            style: const TextStyle(
+              fontSize: 20,
+              height: 1.0,
+              fontWeight: FontWeight.w700,
+              color: Brand.navy,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            _monthShort[date.month - 1],
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: Brand.coral,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Píldora blanca con el nombre de la categoría en su color.
+class _CategoryPill extends StatelessWidget {
+  final CulturalCategory category;
+
+  const _CategoryPill({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _categoryIcon(category),
+            size: 14,
+            color: _categoryColor(category),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _categoryLabel(category),
+            style: TextStyle(
+              color: _categoryColor(category),
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1771,6 +1914,9 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   late bool isFavorite = widget.isFavorite;
+  final ScrollController _scroll = ScrollController();
+  Object? _heroTag;
+  bool _collapsed = false;
 
   CulturalEvent get event => widget.event;
 
@@ -1822,240 +1968,303 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
+  static const double _headerHeight = 300;
+
+  @override
+  void initState() {
+    super.initState();
+    _heroTag = EventHeroTag._take();
+    _scroll.addListener(() {
+      final collapsed =
+          _scroll.hasClients &&
+          _scroll.offset > _headerHeight - kToolbarHeight - 40;
+      if (collapsed != _collapsed) setState(() => _collapsed = collapsed);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final image = _EventImage(event: event, iconSize: 84);
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: _EventImage(event: event, iconSize: 84),
+      body: CustomScrollView(
+        controller: _scroll,
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            stretch: true,
+            expandedHeight: _headerHeight,
+            backgroundColor: Brand.navy,
+            foregroundColor: Colors.white,
+            leading: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Material(
+                color: _collapsed
+                    ? Colors.transparent
+                    : Colors.white.withValues(alpha: 0.92),
+                shape: const CircleBorder(),
+                child: BackButton(
+                  color: _collapsed ? Colors.white : Brand.navy,
                 ),
               ),
-              if (event.imageCredit.isNotEmpty &&
-                  (event.imageUrl.isEmpty || event.genericImage)) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '${event.imageCredit} (imagen orientativa)',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF738196),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Brand.navy, Brand.navyLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            _categoryLabel(event.category),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          onPressed: onToggleFavorite,
-                          icon: Icon(
-                            isFavorite ? Icons.favorite : Icons.favorite_border,
-                            color: Colors.white,
-                          ),
-                          tooltip: 'Favorito',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
+            ),
+            // El título aparece en la barra solo cuando la foto se ha plegado.
+            title: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _collapsed
+                  ? Text(
                       event.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        height: 1.1,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_rounded,
-                          color: Colors.white70,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _eventDateRange(event),
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Brand.line),
-                ),
-                child: Column(
-                  children: [
-                    if (event.timeSlots.isNotEmpty) ...[
-                      _InfoRow(
-                        icon: Icons.access_time_rounded,
-                        text: _eventTimeLabel(event),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    _InfoRow(
-                      icon: Icons.location_on_rounded,
-                      text: event.address.isEmpty
-                          ? event.place
-                          : '${event.place}\n${event.address}',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Descripción',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF102A43),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                event.description,
-                style: const TextStyle(
-                  fontSize: 16,
-                  height: 1.6,
-                  color: Color(0xFF425B71),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _openMoreInfo,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Brand.navy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  icon: const Icon(Icons.language_rounded),
-                  label: const Text(
-                    'Más información',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              stretchModes: const [StretchMode.zoomBackground],
+              background: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _share,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Brand.navy,
-                        side: const BorderSide(color: Brand.skyLine),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                  _heroTag == null ? image : Hero(tag: _heroTag!, child: image),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.0, 0.3, 0.7, 1.0],
+                        colors: [
+                          Color(0x550B2D4A),
+                          Color(0x000B2D4A),
+                          Color(0x000B2D4A),
+                          Color(0x660B2D4A),
+                        ],
                       ),
-                      icon: const Icon(Icons.share_outlined),
-                      label: const Text('Compartir'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _addToCalendar,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Brand.navy,
-                        side: const BorderSide(color: Brand.skyLine),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      icon: const Icon(Icons.event_available_outlined),
-                      label: const Text('Calendario'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onToggleFavorite,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Brand.navy,
-                    side: const BorderSide(color: Brand.skyLine),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (event.imageCredit.isNotEmpty &&
+                      (event.imageUrl.isEmpty || event.genericImage)) ...[
+                    Text(
+                      '${event.imageCredit} (imagen orientativa)',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF738196),
+                      ),
                     ),
-                  ),
-                  icon: Icon(
-                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                  ),
-                  label: Text(
-                    isFavorite
-                        ? 'Quitar de favoritos'
-                        : 'Guardar como favorito',
+                    const SizedBox(height: 14),
+                  ],
+                  _CategoryPill(category: event.category),
+                  const SizedBox(height: 12),
+                  Text(
+                    event.title,
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      color: Brand.navy,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      height: 1.15,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_today_rounded,
+                        color: Brand.coral,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _eventDateRange(event),
+                          style: const TextStyle(
+                            color: Brand.slate,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Brand.line),
+                    ),
+                    child: Column(
+                      children: [
+                        if (event.timeSlots.isNotEmpty) ...[
+                          _InfoRow(
+                            icon: Icons.access_time_rounded,
+                            text: _eventTimeLabel(event),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        _InfoRow(
+                          icon: Icons.location_on_rounded,
+                          text: event.address.isEmpty
+                              ? event.place
+                              : '${event.place}\n${event.address}',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Descripción',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: Brand.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    event.description,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.6,
+                      color: Color(0xFF425B71),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openMoreInfo,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Brand.navy,
+                        side: const BorderSide(color: Brand.navy),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.language_rounded),
+                      label: const Text(
+                        'Más información',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      // Acciones siempre a mano, aunque la descripción sea larga.
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Brand.line)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                _DetailAction(
+                  icon: const Icon(Icons.share_outlined, color: Brand.navy),
+                  label: 'Compartir',
+                  onTap: _share,
+                ),
+                _DetailAction(
+                  icon: const Icon(
+                    Icons.event_available_outlined,
+                    color: Brand.navy,
+                  ),
+                  label: 'Calendario',
+                  onTap: _addToCalendar,
+                ),
+                _DetailAction(
+                  icon: AnimatedHeartIcon(
+                    isFavorite: isFavorite,
+                    size: 24,
+                    idleColor: Brand.navy,
+                  ),
+                  label: isFavorite ? 'Guardado' : 'Favorito',
+                  semanticsLabel: isFavorite
+                      ? 'Quitar de favoritos'
+                      : 'Guardar como favorito',
+                  onTap: () {
+                    favoriteHaptic();
+                    onToggleFavorite();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón de la barra inferior de la ficha: icono sobre texto.
+class _DetailAction extends StatelessWidget {
+  final Widget icon;
+  final String label;
+  final String? semanticsLabel;
+  final VoidCallback onTap;
+
+  const _DetailAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.semanticsLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Semantics(
+        button: true,
+        label: semanticsLabel ?? label,
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Brand.navy,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

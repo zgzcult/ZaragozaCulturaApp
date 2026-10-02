@@ -321,5 +321,87 @@ class GeocodePlacesTests(unittest.TestCase):
         self.assertEqual(stats["calls"], 3)
 
 
+def raw_monument(**overrides):
+    data = {
+        "id": 2,
+        "title": "Museo del Foro de Caesaraugusta",
+        "description": "El Foro es el centro <strong>neurálgico</strong>.\r\n<p>Segundo&nbsp;párrafo.</p>",
+        "estilo": "romano",
+        "address": "Plaza de la Seo, 2",
+        "horario": "Martes a sábado de 10 a 14h\r\nLunes cerrado",
+        "phone": "976 72 12 21",
+        "datacion": "Siglo I a.C. - Siglo I d.C.",
+        "price": "<em>Entrada</em>: 3 euros",
+        "image": "http://www.zaragoza.es/azar/img/monumentos/forop.jpg",
+        "top": "S",
+        "geometry": {"type": "Point", "coordinates": [676934.75, 4613880.67]},
+        "uri": "https://www.zaragoza.es/sede/portal/turismo/servicio/monumento/2",
+    }
+    data.update(overrides)
+    return data
+
+
+class MonumentTests(unittest.TestCase):
+    def test_monumento_completo(self):
+        m = places.normalize_place("monumento", raw_monument())
+        self.assertEqual(m["id"], "monumento-2")
+        self.assertEqual(m["type"], "monumento")
+        self.assertEqual(m["name"], "Museo del Foro de Caesaraugusta")
+        self.assertEqual(m["address"], "Plaza de la Seo, 2")
+        self.assertEqual(m["phone"], "976 72 12 21")
+        self.assertAlmostEqual(m["lat"], 41.655183, places=4)
+        self.assertEqual(m["styles"], ["Romano"])
+        self.assertEqual(m["datacion"], "Siglo I a.C. - Siglo I d.C.")
+        self.assertTrue(m["museum"])
+        self.assertTrue(m["top"])
+        # Página oficial y foto, siempre por https.
+        self.assertEqual(m["url"], "https://www.zaragoza.es/sede/portal/turismo/servicio/monumento/2")
+        self.assertEqual(m["image"], "https://www.zaragoza.es/azar/img/monumentos/forop.jpg")
+
+    def test_textos_oficiales_sin_html_y_sin_cambiar_la_redaccion(self):
+        m = places.normalize_place("monumento", raw_monument())
+        self.assertEqual(m["description"], "El Foro es el centro neurálgico.\n\nSegundo párrafo.")
+        self.assertEqual(m["horario"], "Martes a sábado de 10 a 14h\nLunes cerrado")
+        self.assertEqual(m["price"], "Entrada: 3 euros")
+
+    def test_listas_e_imagenes_del_html(self):
+        text = places.html_to_text('<p><img src="/x.jpg" alt=""/> Accesible</p><ul><li>Uno</li><li>Dos</li></ul>')
+        self.assertEqual(text, "Accesible\n\n• Uno\n• Dos")
+
+    def test_sin_coordenadas_usa_la_direccion(self):
+        m = places.normalize_place("monumento", raw_monument(geometry=None))
+        self.assertIsNotNone(m)
+        self.assertIsNone(m["lat"])
+        self.assertEqual(m["street"], "Plaza de la Seo, 2")
+
+    def test_grupos_de_estilo(self):
+        self.assertEqual(places.style_groups("barroco, neoclasico"), ["Barroco", "Neoclásico"])
+        self.assertEqual(places.style_groups("Románico, Gótico, Mudéjar"), ["Medieval", "Mudéjar"])
+        # Un neomudéjar del siglo XIX es contemporáneo, no mudéjar.
+        self.assertEqual(places.style_groups("contemporaneo: historicismo Neomudéjar"), ["Contemporáneo"])
+        self.assertEqual(places.style_groups("Comtemporáneo"), ["Contemporáneo"])
+        self.assertEqual(places.style_groups("entorno"), ["Naturaleza"])
+        self.assertEqual(places.style_groups(""), [])
+
+    def test_no_es_museo_ni_imprescindible(self):
+        m = places.normalize_place("monumento", raw_monument(title="Iglesia de San Pablo", top=None, image="ftp://x"))
+        self.assertFalse(m["museum"])
+        self.assertFalse(m["top"])
+        self.assertEqual(m["image"], "")
+
+    def test_los_restaurantes_no_llevan_campos_de_monumento(self):
+        self.assertNotIn("description", places.normalize_place("restaurante", raw()))
+
+    def test_limpieza_por_tipo_con_su_minimo(self):
+        col = FakeCollection([f"r{i}" for i in range(300)])
+        col.docs.update({f"m{i}": {"id": f"m{i}", "type": "monumento"} for i in range(150)})
+        col.docs["m-viejo"] = {"id": "m-viejo", "type": "monumento"}
+        monuments = [{"id": f"m{i}", "type": "monumento"} for i in range(150)]
+        places.save("monumento", monuments, col)
+        self.assertNotIn("m-viejo", col.docs)
+        # Los restaurantes no se tocan.
+        self.assertEqual(sum(1 for d in col.docs.values() if d.get("type") == "restaurante"), 300)
+
+
 if __name__ == "__main__":
     unittest.main()

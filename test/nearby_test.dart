@@ -305,15 +305,11 @@ void main() {
     await tester.tap(find.text('Actividades'));
     await tester.pumpAndSettle();
 
-    for (final label in [
-      'Agenda',
-      'Cerca de mí',
-      'Buscar',
-      'Favoritos',
-      'Ajustes',
-    ]) {
+    for (final label in ['Agenda', 'Cerca de mí', 'Buscar', 'Favoritos']) {
       expect(find.text(label), findsWidgets, reason: label);
     }
+    // Ajustes ya no está en la barra: está en la pantalla principal.
+    expect(find.text('Ajustes'), findsNothing);
     final agenda = tester.getTopLeft(find.text('Agenda')).dx;
     final cerca = tester.getTopLeft(find.text('Cerca de mí')).dx;
     final buscar = tester.getTopLeft(find.text('Buscar')).dx;

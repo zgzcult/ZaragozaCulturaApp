@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'event_classifier.dart';
 import 'nearby.dart';
 import 'brand.dart';
+import 'ui_kit.dart';
 
 const String _placesUrl =
     'https://zaragoza-cultura-app.onrender.com/places?type=restaurante';
@@ -674,7 +675,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
             )
           : null,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const SkeletonList(count: 4)
           : _failed
           ? Center(
               child: Padding(

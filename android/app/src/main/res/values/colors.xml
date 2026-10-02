@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#F7F6EF</color>
+    <!-- Crema de la marca: fondo de la pantalla de arranque. -->
+    <color name="splash_background">#F7F6EF</color>
 </resources>

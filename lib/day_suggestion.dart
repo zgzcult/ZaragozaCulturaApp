@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'event_classifier.dart';
 import 'main.dart';
 import 'brand.dart';
+import 'ui_kit.dart';
 
 // ---------------------------------------------------------------------------
 // Lógica
@@ -252,7 +253,7 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
 
     Widget body;
     if (_loading) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const SkeletonList();
     } else if (_failed) {
       body = Center(
         child: Padding(
