@@ -314,6 +314,8 @@ class _UsefulServicesScreenState extends State<UsefulServicesScreen> {
                     ? 'No disponible ahora mismo'
                     : group.id == 'farmacias-guardia'
                     ? '${group.items.length} abiertas hoy'
+                    : group.id == 'centros-salud'
+                    ? '${group.items.length} centros'
                     : '${group.items.length} lugares',
                 onTap: group.items.isEmpty
                     ? null
@@ -337,8 +339,9 @@ class _UsefulServicesScreenState extends State<UsefulServicesScreen> {
           ],
           const SizedBox(height: 14),
           const Text(
-            'Datos: Ayuntamiento de Zaragoza. Antes de ir, confirma el '
-            'horario por teléfono o en la ficha oficial.',
+            'Farmacias de guardia: Ayuntamiento de Zaragoza. Centros de salud: '
+            'Servicio Aragonés de Salud y Aragón Open Data. Antes de ir, '
+            'confirma el horario por teléfono.',
             style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
           ),
         ],

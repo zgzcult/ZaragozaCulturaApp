@@ -143,8 +143,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(home: HomeScreen(servicesRepository: _Repo(groups))),
       );
-      await tester.scrollUntilVisible(find.text('Servicios útiles'), 100);
-      await tester.tap(find.text('Servicios útiles'));
+      await tester.tap(find.text('Servicios'));
       await tester.pumpAndSettle();
       expect(find.text('Hospitales'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);

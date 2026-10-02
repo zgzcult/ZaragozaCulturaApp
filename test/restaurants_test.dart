@@ -292,7 +292,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Restaurantes'));
+    await tester.tap(find.text('Comer'));
     await tester.pumpAndSettle();
 
     expect(find.text('1 restaurante en el mapa'), findsOneWidget);

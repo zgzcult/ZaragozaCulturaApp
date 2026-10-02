@@ -41,24 +41,30 @@ class _AnimatedHeartIconState extends State<AnimatedHeartIcon>
     TweenSequenceItem(
       tween: Tween(
         begin: 1.0,
-        end: 1.35,
+        end: 1.55,
       ).chain(CurveTween(curve: Curves.easeOut)),
-      weight: 35,
+      weight: 30,
     ),
     TweenSequenceItem(
       tween: Tween(
-        begin: 1.35,
+        begin: 1.55,
         end: 1.0,
       ).chain(CurveTween(curve: Curves.elasticOut)),
-      weight: 65,
+      weight: 70,
     ),
   ]).animate(_controller);
 
+  /// Onda que se expande al guardar (no al quitar).
+  bool _burst = false;
+
+  // Es una respuesta breve a un toque del usuario, así que se muestra
+  // aunque el teléfono tenga reducidas las animaciones del sistema.
   @override
   void didUpdateWidget(AnimatedHeartIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isFavorite != widget.isFavorite &&
-        !MediaQuery.disableAnimationsOf(context)) {
+    if (oldWidget.isFavorite != widget.isFavorite) {
+      _burst = widget.isFavorite;
+      _controller.duration = const Duration(milliseconds: 650);
       _controller.forward(from: 0);
     }
   }
@@ -71,13 +77,49 @@ class _AnimatedHeartIconState extends State<AnimatedHeartIcon>
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
+    final heart = ScaleTransition(
       scale: _scale,
       child: Icon(
         widget.isFavorite ? Icons.favorite : Icons.favorite_border,
         size: widget.size,
         color: widget.isFavorite ? Brand.coral : widget.idleColor,
       ),
+    );
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: [
+        // Fuera del flujo: la onda no cambia el tamaño del botón.
+        if (_burst)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) {
+                  if (_controller.isCompleted) return const SizedBox.shrink();
+                  final t = Curves.easeOut.transform(_controller.value);
+                  final diameter = widget.size * (0.6 + 1.4 * t);
+                  return OverflowBox(
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: Container(
+                      width: diameter,
+                      height: diameter,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Brand.coral.withValues(alpha: 0.6 * (1 - t)),
+                          width: 2.5,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        heart,
+      ],
     );
   }
 }

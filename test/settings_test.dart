@@ -245,7 +245,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(400, 2000));
       await tester.pumpWidget(const ZaragozaCulturaApp(repository: _Repo()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Actividades'));
+      await tester.tap(find.text('Agenda'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Origen de los datos'), findsNothing);
       expect(find.textContaining('Aplicación no oficial'), findsNothing);

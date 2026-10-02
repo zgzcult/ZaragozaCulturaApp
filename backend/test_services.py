@@ -78,31 +78,42 @@ class NormalizeTests(unittest.TestCase):
 
 
 class CollectTests(unittest.TestCase):
-    def test_todos_los_grupos_en_orden_y_un_fallo_no_estropea_el_resto(self):
-        def fetch(url):
-            if "farmacia" in url:
-                return {"result": [FARMACIA]}
-            if "/category/94." in url:
-                return {"equipamiento": [POLICIA, POLICIA]}  # duplicado
-            if "/category/760." in url:
-                raise OSError("caído")
-            if "/category/1060." in url:
-                return {"equipamiento": [BANO]}
-            return {"equipamiento": []}
+    def test_solo_farmacias_de_guardia_y_centros_de_salud(self):
+        data = services.collect_services(lambda url: {"result": [FARMACIA, FARMACIA]})
+        self.assertEqual([g["id"] for g in data["groups"]], ["farmacias-guardia", "centros-salud"])
+        self.assertEqual(data["groups"][1]["title"], "Centros Salud Públicos")
+        self.assertEqual(len(data["groups"][0]["items"]), 1)  # sin duplicados
 
-        data = services.collect_services(fetch)
-        ids = [g["id"] for g in data["groups"]]
-        self.assertEqual(
-            ids,
-            ["farmacias-guardia", "hospitales", "centros-salud", "policia-local", "policia-nacional", "aseos"],
-        )
-        groups = {g["id"]: g for g in data["groups"]}
-        self.assertEqual(len(groups["farmacias-guardia"]["items"]), 1)
-        self.assertEqual(len(groups["policia-local"]["items"]), 1)
-        self.assertTrue(groups["policia-nacional"]["error"])
-        self.assertEqual(groups["policia-nacional"]["items"], [])
-        self.assertEqual(len(groups["aseos"]["items"]), 1)
-        self.assertNotIn("error", groups["aseos"])
+    def test_si_falla_el_ayuntamiento_los_centros_de_salud_siguen(self):
+        def fetch(url):
+            raise OSError("caído")
+
+        groups = {g["id"]: g for g in services.collect_services(fetch)["groups"]}
+        self.assertTrue(groups["farmacias-guardia"]["error"])
+        self.assertEqual(len(groups["centros-salud"]["items"]), 34)
+        self.assertNotIn("error", groups["centros-salud"])
+
+    def test_centros_de_salud_del_listado_oficial(self):
+        items = {i["name"]: i for i in services.health_centres()}
+        almozara = items["Almozara"]
+        self.assertEqual(almozara["address"], "Avda. Autonomía, 5, 50003 Zaragoza")
+        self.assertEqual(almozara["call"], "876765120")
+        self.assertIn("Cita previa: 976 306 841", almozara["info"])
+        self.assertIn("Atención a domicilio: 876 765 121", almozara["info"])
+        self.assertIn("Sector Zaragoza II", almozara["info"])
+        self.assertTrue(almozara["url"].startswith("https://sectorzaragozados.salud.aragon.es/"))
+
+    def test_solo_zaragoza_capital_con_los_tres_sectores(self):
+        items = {i["name"]: i for i in services.health_centres()}
+        for fuera in ("Sástago", "Campo de Belchite", "Fuentes de Ebro"):
+            self.assertNotIn(fuera, items)
+        for barrio in ("Actur Norte", "Picarral", "Delicias Sur", "Oliver", "Casetas", "Valdespartera"):
+            self.assertIn(barrio, items)
+        oliver = items["Oliver"]
+        self.assertEqual(oliver["call"], "976346359")
+        self.assertIn("Sector Zaragoza III", oliver["info"])
+        self.assertNotIn("Cita previa", oliver["info"])  # la fuente no la indica
+        self.assertTrue(oliver["url"].startswith("https://opendata.aragon.es/"))
 
 
 class ServerCacheTests(unittest.TestCase):

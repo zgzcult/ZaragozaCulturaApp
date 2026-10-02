@@ -148,6 +148,41 @@ void main() {
     }
   });
 
+  testWidgets('el contenido no queda bajo los botones de navegación', (
+    tester,
+  ) async {
+    double? childBottomPadding;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(400, 800),
+          viewPadding: EdgeInsets.only(bottom: 48),
+          padding: EdgeInsets.only(bottom: 48),
+        ),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: SystemNavigationBarArea(
+            child: Builder(
+              builder: (context) {
+                childBottomPadding = MediaQuery.paddingOf(context).bottom;
+                return const SizedBox.expand();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    // La app recibe el espacio ya descontado y la franja es azul marino.
+    expect(childBottomPadding, 0);
+    expect(tester.getSize(find.byType(SizedBox).last).height, 48);
+    final box = tester.widget<ColoredBox>(find.byType(ColoredBox).first);
+    expect(box.color, Brand.navy);
+    expect(
+      SystemNavigationBarArea.style.systemNavigationBarIconBrightness,
+      Brightness.light,
+    );
+  });
+
   testWidgets('La aplicación arranca directamente en la pantalla principal', (
     tester,
   ) async {
@@ -155,8 +190,8 @@ void main() {
     await tester.pumpWidget(const ZaragozaCulturaApp());
     // Sin animación previa: la pantalla principal está desde el primer frame.
     expect(find.byType(HomeScreen), findsOneWidget);
-    expect(find.textContaining('Bienvenid@ a'), findsOneWidget);
-    expect(find.textContaining('Maña Zaragoza'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'Buen(os|as) ')), findsOneWidget);
+    expect(find.bySemanticsLabel(Brand.name), findsOneWidget); // el logo
     await tester.pumpAndSettle();
   });
 }

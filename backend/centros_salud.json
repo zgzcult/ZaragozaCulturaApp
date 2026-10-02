@@ -1,0 +1,52 @@
+{
+  "checked": "2026-10-02",
+  "sources": {
+    "sector2": {
+      "name": "Servicio Aragonés de Salud · Sector Zaragoza II",
+      "url": "https://sectorzaragozados.salud.aragon.es/conocenos/asistencia/centros-de-salud/",
+      "citas": "976 306 841"
+    },
+    "opendata": {
+      "name": "Gobierno de Aragón · Aragón Open Data (Centros de Salud, CC BY 4.0)",
+      "url": "https://opendata.aragon.es/ckan/dataset/sanidad/resource/93c562ab-425e-4dbe-91fe-8574e7146952"
+    }
+  },
+  "centros": [
+    {"name": "Actur Norte", "address": "Calle Carlos Saura, 20", "postal": "50018", "town": "Zaragoza", "phone": "976 521 530", "sector": "I", "source": "opendata"},
+    {"name": "Actur Oeste (Amparo Poch)", "address": "Calle Emilia Pardo Bazán, s/n", "postal": "50018", "town": "Zaragoza", "phone": "976 547 499", "sector": "I", "source": "opendata"},
+    {"name": "Actur Sur", "address": "Calle Gómez Avellaneda, 3", "postal": "50018", "town": "Zaragoza", "phone": "976 732 443", "sector": "I", "source": "opendata"},
+    {"name": "Arrabal", "address": "Andador Aragüés del Puerto", "postal": "50015", "town": "Zaragoza", "phone": "976 731 500", "sector": "I", "source": "opendata"},
+    {"name": "La Jota", "address": "Avenida de La Jota, 42", "postal": "50014", "town": "Zaragoza", "phone": "976 474 210", "sector": "I", "source": "opendata"},
+    {"name": "Parque Goya", "address": "Calle Eugenio Lucas, 31", "postal": "50018", "town": "Zaragoza", "phone": "876 767 100", "sector": "I", "source": "opendata"},
+    {"name": "Picarral", "address": "Avenida San Juan de la Peña, 113", "postal": "50015", "town": "Zaragoza", "phone": "976 798 680", "sector": "I", "source": "opendata"},
+    {"name": "Santa Isabel", "address": "Calle Alameda (Santa Isabel)", "postal": "50058", "town": "Zaragoza", "phone": "976 572 102", "sector": "I", "source": "opendata"},
+
+    {"name": "Almozara", "address": "Avda. Autonomía, 5", "postal": "50003", "town": "Zaragoza", "phone": "876 76 51 20", "home": "876 765 121", "sector": "II", "source": "sector2"},
+    {"name": "Canal Imperial - San José Sur", "address": "Paseo Colón, 4", "postal": "50006", "town": "Zaragoza", "phone": "976 25 83 33", "home": "976 258 330", "sector": "II", "source": "sector2"},
+    {"name": "Canal Imperial - Venecia", "address": "Paseo Colón, 4", "postal": "50006", "town": "Zaragoza", "phone": "976 25 83 33", "home": "976 258 330", "sector": "II", "source": "sector2"},
+    {"name": "Casablanca", "address": "Viñedo Viejo, 10", "postal": "50009", "town": "Zaragoza", "phone": "976 56 92 00", "home": "976 569 364", "sector": "II", "source": "sector2"},
+    {"name": "Fernando el Católico", "address": "Domingo Miral, s/n", "postal": "50009", "town": "Zaragoza", "phone": "976 56 59 94", "home": "976 566 252", "sector": "II", "source": "sector2"},
+    {"name": "Las Fuentes Norte", "address": "Dr. Iranzo, 69", "postal": "50002", "town": "Zaragoza", "phone": "976 29 03 30", "home": "976 290 334", "sector": "II", "source": "sector2"},
+    {"name": "Muñoz Fdez. - Miraflores", "address": "Pº Sagasta, 52", "postal": "50006", "town": "Zaragoza", "phone": "976 25 80 61", "home": "976 258 130", "sector": "II", "source": "sector2"},
+    {"name": "Muñoz Fdez. - Ruiseñores", "address": "Pº Sagasta, 52", "postal": "50006", "town": "Zaragoza", "phone": "976 25 80 61", "home": "976 258 130", "sector": "II", "source": "sector2"},
+    {"name": "Parque Roma", "address": "Urbanización Parque Roma bloque A-6 bajos", "postal": "50010", "town": "Zaragoza", "phone": "976 40 36 00", "home": "976 403 605", "sector": "II", "source": "sector2"},
+    {"name": "Puerta del Carmen", "address": "Pº María Agustín, 12-14", "postal": "50004", "town": "Zaragoza", "phone": "976 22 65 63", "home": "976 224 443", "sector": "II", "source": "sector2"},
+    {"name": "Rebolería", "address": "Plaza de Rebolería, s/n", "postal": "50002", "town": "Zaragoza", "phone": "876 76 51 00", "home": "876 765 101", "sector": "II", "source": "sector2"},
+    {"name": "San José Centro", "address": "Santuario de Cabañas, 16", "postal": "50013", "town": "Zaragoza", "phone": "976 59 41 57", "home": "976 591 687", "sector": "II", "source": "sector2"},
+    {"name": "San José Norte", "address": "Santuario de Cabañas, 16", "postal": "50013", "town": "Zaragoza", "phone": "976 59 41 57", "home": "976 591 687", "sector": "II", "source": "sector2"},
+    {"name": "San Pablo", "address": "Aguadores, 7", "postal": "50003", "town": "Zaragoza", "phone": "976 46 91 06", "home": "976 405 230", "sector": "II", "source": "sector2"},
+    {"name": "Seminario", "address": "Condes de Aragón, 30", "postal": "50009", "town": "Zaragoza", "phone": "976 45 82 22", "home": "976 458 225", "sector": "II", "source": "sector2"},
+    {"name": "Torre Ramona", "address": "Petunia, 2", "postal": "50013", "town": "Zaragoza", "phone": "976 59 11 28", "home": "976 595 365", "sector": "II", "source": "sector2"},
+    {"name": "Torrero - La Paz", "address": "Soleimán, 11", "postal": "50007", "town": "Zaragoza", "phone": "976 25 31 00", "home": "976 254 319", "sector": "II", "source": "sector2"},
+    {"name": "Valdespartera", "address": "Ventana Indiscreta, 1", "postal": "50019", "town": "Zaragoza", "phone": "876 76 51 10", "home": "876 765 111", "sector": "II", "source": "sector2"},
+
+    {"name": "Bombarda", "address": "Calle Miguel Labordeta, 22", "postal": "50017", "town": "Zaragoza", "phone": "976 318 060", "sector": "III", "source": "opendata"},
+    {"name": "Casetas", "address": "Calle Baleares, 2 (Casetas)", "postal": "50620", "town": "Zaragoza", "phone": "976 771 347", "sector": "III", "source": "opendata"},
+    {"name": "Delicias Norte", "address": "Calle Santa Orosia, 46", "postal": "50010", "town": "Zaragoza", "phone": "976 342 828", "sector": "III", "source": "opendata"},
+    {"name": "Delicias Sur", "address": "Calle Manuel Dronda, 1", "postal": "50009", "town": "Zaragoza", "phone": "976 556 000", "sector": "III", "source": "opendata"},
+    {"name": "Miralbueno - Garrapinillos", "address": "Ronda Ibón de Plan", "postal": "50011", "town": "Zaragoza", "phone": "976 300 994", "sector": "III", "source": "opendata"},
+    {"name": "Oliver", "address": "Calle San Alberto Magno", "postal": "50011", "town": "Zaragoza", "phone": "976 346 359", "sector": "III", "source": "opendata"},
+    {"name": "Univérsitas", "address": "Calle Andrés Vicente, 42", "postal": "50017", "town": "Zaragoza", "phone": "976 324 195", "sector": "III", "source": "opendata"},
+    {"name": "Valdefierro", "address": "Calle Orión, 1", "postal": "50012", "town": "Zaragoza", "phone": "976 334 091", "sector": "III", "source": "opendata"}
+  ]
+}

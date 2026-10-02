@@ -1,9 +1,8 @@
-"""«Servicios útiles»: farmacias de guardia, hospitales, centros de salud,
-policía y aseos públicos, desde los datos abiertos del Ayuntamiento de
-Zaragoza.
+"""«Servicios útiles»: farmacias de guardia (datos abiertos del Ayuntamiento
+de Zaragoza) y centros de salud públicos (Servicio Aragonés de Salud).
 
-El servidor los descarga directamente (con caché), así las farmacias de
-guardia están siempre al día sin depender del workflow.
+El servidor descarga las farmacias directamente (con caché), así están
+siempre al día sin depender del workflow.
 """
 
 from __future__ import annotations
@@ -22,16 +21,51 @@ from places import _coordinates, _text, html_to_text  # noqa: E402
 BASE = "https://www.zaragoza.es/sede/servicio"
 HEADERS = {"User-Agent": "ZaragozaCulturaApp/1.0", "Accept": "application/json"}
 
-# Grupos en el orden en que se muestran. «categories» son categorías de
-# equipamientos del Ayuntamiento.
+# Grupos en el orden en que se muestran.
 GROUPS = [
     {"id": "farmacias-guardia", "title": "Farmacias de guardia", "source": "farmacia"},
-    {"id": "hospitales", "title": "Hospitales", "categories": [780]},
-    {"id": "centros-salud", "title": "Centros de salud", "categories": [781]},
-    {"id": "policia-local", "title": "Policía Local", "categories": [94]},
-    {"id": "policia-nacional", "title": "Policía Nacional", "categories": [760]},
-    {"id": "aseos", "title": "Aseos públicos", "categories": [1040, 1060]},
+    {"id": "centros-salud", "title": "Centros Salud Públicos", "source": "centros_salud"},
 ]
+
+# Centros de salud públicos de Zaragoza capital: Sector II del listado del
+# Servicio Aragonés de Salud y sectores I y III de Aragón Open Data (ver
+# «sources» en el fichero). Cambian muy poco.
+CENTROS_SALUD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "centros_salud.json")
+
+
+def health_centres(path: str = CENTROS_SALUD_FILE) -> List[Dict[str, Any]]:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    sources = data.get("sources", {})
+    items = []
+    for i, centre in enumerate(data.get("centros", [])):
+        if centre.get("town") != "Zaragoza":  # solo Zaragoza capital y sus barrios
+            continue
+        source = sources.get(centre.get("source", ""), {})
+        citas = source.get("citas", "")
+        address = ", ".join(
+            p for p in (centre.get("address", ""), f"{centre.get('postal', '')} {centre.get('town', '')}".strip()) if p
+        )
+        info = [
+            f"Sector Zaragoza {centre['sector']}" if centre.get("sector") else "",
+            f"Cita previa: {citas}" if citas else "",
+            f"Atención a domicilio: {centre['home']}" if centre.get("home") else "",
+        ]
+        items.append(
+            {
+                "id": f"centros-salud-{i}",
+                "name": centre["name"],
+                "address": address,
+                "phone": centre.get("phone", ""),
+                "call": first_phone(centre.get("phone", "")),
+                "horario": "",
+                "info": "\n".join(x for x in info if x),
+                "url": source.get("url", ""),
+                "lat": None,
+                "lng": None,
+            }
+        )
+    return items
 
 _PHONE = re.compile(r"(?<![\d])([6789](?:[ .]?\d){8})(?![\d])")
 
@@ -114,6 +148,10 @@ def collect_services(fetch: Callable[[str], Any] = _fetch_json) -> Dict[str, Any
     for group in GROUPS:
         entry: Dict[str, Any] = {"id": group["id"], "title": group["title"], "items": []}
         try:
+            if group.get("source") == "centros_salud":
+                entry["items"] = sorted(health_centres(), key=lambda i: i["name"].lower())
+                groups.append(entry)
+                continue
             seen = set()
             for raw in _raw_items(group, fetch):
                 item = normalize_service(group["id"], raw)

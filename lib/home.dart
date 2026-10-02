@@ -1,8 +1,12 @@
-/// Pantalla principal de Maña Zaragoza: Actividades, Restaurantes, la
-/// sugerencia del día y Monumentos y museos.
+/// Pantalla principal de Maña Zaragoza: saludo según la hora, accesos
+/// compactos a las secciones y bloques deslizables con contenido del día
+/// (recomendaciones, rutas, monumentos imprescindibles y farmacias de guardia).
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import 'brand.dart';
 import 'day_suggestion.dart';
@@ -10,14 +14,85 @@ import 'main.dart';
 import 'monuments.dart';
 import 'nearby.dart';
 import 'restaurants.dart';
+import 'routes.dart';
+import 'ui_kit.dart';
 import 'useful_services.dart';
 
-class HomeScreen extends StatelessWidget {
+const String _weatherUrl = 'https://zaragoza-cultura-app.onrender.com/weather';
+
+/// Temperatura actual en Zaragoza (AEMET, a través de nuestro servidor).
+abstract class WeatherRepository {
+  const WeatherRepository();
+
+  /// Grados redondeados, o null si no se sabe.
+  Future<int?> currentTemperature();
+}
+
+class HttpWeatherRepository extends WeatherRepository {
+  const HttpWeatherRepository();
+
+  @override
+  Future<int?> currentTemperature() async {
+    try {
+      final response = await http
+          .get(Uri.parse(_weatherUrl))
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) return null;
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final temp = data is Map ? data['temp'] : null;
+      return temp is num ? temp.round() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// «Buenos días», «Buenas tardes» o «Buenas noches» según la hora.
+String greetingFor(DateTime now) {
+  if (now.hour >= 6 && now.hour < 13) return 'Buenos días';
+  if (now.hour >= 13 && now.hour < 21) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+const _weekdays = [
+  'LUNES',
+  'MARTES',
+  'MIÉRCOLES',
+  'JUEVES',
+  'VIERNES',
+  'SÁBADO',
+  'DOMINGO',
+];
+const _months = [
+  'ENERO',
+  'FEBRERO',
+  'MARZO',
+  'ABRIL',
+  'MAYO',
+  'JUNIO',
+  'JULIO',
+  'AGOSTO',
+  'SEPTIEMBRE',
+  'OCTUBRE',
+  'NOVIEMBRE',
+  'DICIEMBRE',
+];
+
+/// «VIERNES 2 DE OCTUBRE · 17°» (sin temperatura si no se conoce).
+String headerDateLabel(DateTime now, int? temperature) {
+  final date =
+      '${_weekdays[now.weekday - 1]} ${now.day} DE ${_months[now.month - 1]}';
+  return temperature == null ? date : '$date · $temperature°';
+}
+
+class HomeScreen extends StatefulWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
   final PlacesRepository placesRepository;
   final MonumentsRepository monumentsRepository;
   final ServicesRepository servicesRepository;
+  final WeatherRepository weatherRepository;
+  final DateTime Function() clock;
 
   const HomeScreen({
     super.key,
@@ -26,140 +101,176 @@ class HomeScreen extends StatelessWidget {
     this.placesRepository = const HttpPlacesRepository(),
     this.monumentsRepository = const HttpMonumentsRepository(),
     this.servicesRepository = const HttpServicesRepository(),
+    this.weatherRepository = const HttpWeatherRepository(),
+    this.clock = DateTime.now,
   });
 
-  /// Altura mínima de cada tarjeta; si no caben, la pantalla se desplaza.
-  static const double _minCardHeight = 160;
-  static const double _gap = 14;
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-  void _open(BuildContext context, Widget screen) {
+class _HomeScreenState extends State<HomeScreen> {
+  List<DaySuggestion>? _suggestions;
+  List<Monument>? _monuments;
+  ServiceGroup? _pharmacies;
+  int? _temperature;
+  final FavoritesStorage _favoritesStorage = FavoritesStorage();
+  final Set<String> _favorites = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSuggestions();
+    _loadMonuments();
+    _loadPharmacies();
+    widget.weatherRepository.currentTemperature().then((value) {
+      if (mounted && value != null) setState(() => _temperature = value);
+    });
+  }
+
+  /// Usa lo guardado en el teléfono; solo descarga si no hay nada.
+  Future<void> _loadSuggestions() async {
+    final favorites = await _favoritesStorage.load();
+    var events = await widget.repository.loadCached();
+    if (events.isEmpty) events = await widget.repository.fetchFresh() ?? [];
+    if (!mounted) return;
+    setState(() {
+      _favorites
+        ..clear()
+        ..addAll(favorites);
+      _suggestions = pickDaySuggestions(events, now: widget.clock());
+    });
+  }
+
+  Future<void> _loadMonuments() async {
+    final cached = await widget.monumentsRepository.loadCached();
+    if (!mounted) return;
+    if (cached.isNotEmpty) setState(() => _monuments = cached);
+    final fresh = await widget.monumentsRepository.fetchFresh();
+    if (!mounted) return;
+    setState(() => _monuments = fresh ?? _monuments ?? const []);
+  }
+
+  Future<void> _loadPharmacies() async {
+    ServiceGroup? pick(List<ServiceGroup> groups) {
+      for (final group in groups) {
+        if (group.id == 'farmacias-guardia' && group.items.isNotEmpty) {
+          return group;
+        }
+      }
+      return null;
+    }
+
+    final cached = pick(await widget.servicesRepository.loadCached());
+    if (!mounted) return;
+    if (cached != null) setState(() => _pharmacies = cached);
+    final fresh = await widget.servicesRepository.fetchFresh();
+    if (!mounted || fresh == null) return;
+    setState(() => _pharmacies = pick(fresh) ?? _pharmacies);
+  }
+
+  void _open(Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  Future<void> _openSettings(BuildContext context) async {
+  Future<void> _openSettings() async {
     final reminders = await loadRemindersEnabled();
-    if (!context.mounted) return;
+    if (!mounted) return;
     _open(
-      context,
       SettingsScreen(
         remindersEnabled: reminders,
         onRemindersChanged: (enabled) =>
-            setFavoriteReminders(enabled, repository: repository),
-        locationService: locationService,
+            setFavoriteReminders(enabled, repository: widget.repository),
+        locationService: widget.locationService,
       ),
     );
   }
 
-  List<Widget> _cards(BuildContext context) => [
-    _HomeCard(
-      image: 'assets/home/actividades.jpg',
-      icon: Icons.calendar_month_outlined,
-      accent: Brand.sky,
-      label: 'AGENDA',
-      title: 'Actividades',
-      subtitle: 'Por días, cerca de ti, buscador y favoritos',
-      onTap: () => _open(
-        context,
-        AgendaScreen(repository: repository, locationService: locationService),
+  Future<void> _toggleFavorite(String id) async {
+    setState(() {
+      if (!_favorites.remove(id)) _favorites.add(id);
+    });
+    await _favoritesStorage.save(_favorites);
+  }
+
+  void _openEvent(CulturalEvent event) {
+    _open(
+      EventDetailScreen(
+        event: event,
+        isFavorite: _favorites.contains(event.id),
+        onToggleFavorite: () => _toggleFavorite(event.id),
       ),
+    );
+  }
+
+  void _openAgenda() => _open(
+    AgendaScreen(
+      repository: widget.repository,
+      locationService: widget.locationService,
     ),
-    _HomeCard(
-      image: 'assets/home/restaurantes.jpg',
-      icon: Icons.restaurant_outlined,
-      accent: Brand.coral,
-      label: 'GASTRONOMÍA',
-      title: 'Restaurantes',
-      subtitle: 'Dónde comer, en el mapa',
-      onTap: () => _open(
-        context,
-        RestaurantsScreen(
-          repository: placesRepository,
-          locationService: locationService,
-        ),
-      ),
-    ),
-    _HomeCard(
-      image: 'assets/home/sugerencias.jpg',
-      icon: Icons.auto_awesome_outlined,
-      accent: Brand.navy,
-      label: 'PARA HOY',
-      title: 'Sugerencia del día',
-      subtitle: 'Hoy te recomendamos esto',
-      onTap: () =>
-          _open(context, SuggestionOfDayScreen(repository: repository)),
-    ),
-    _HomeCard(
-      image: 'assets/home/monumentos.jpg',
-      icon: Icons.account_balance_outlined,
-      accent: Brand.navyLight,
-      label: 'PATRIMONIO',
-      title: 'Monumentos',
-      subtitle: 'y museos para descubrir la ciudad',
-      onTap: () =>
-          _open(context, MonumentsScreen(repository: monumentsRepository)),
-    ),
-    _HomeCard(
-      image: 'assets/home/servicios.jpg',
-      icon: Icons.health_and_safety_outlined,
-      accent: Brand.sky,
-      label: 'A MANO',
-      title: 'Servicios útiles',
-      subtitle: 'Farmacias de guardia, salud, policía y aseos',
-      onTap: () =>
-          _open(context, UsefulServicesScreen(repository: servicesRepository)),
-    ),
-  ];
+  );
+
+  void _openSuggestions() =>
+      _open(SuggestionOfDayScreen(repository: widget.repository));
+
+  void _openMonuments() =>
+      _open(MonumentsScreen(repository: widget.monumentsRepository));
 
   @override
   Widget build(BuildContext context) {
+    final now = widget.clock();
+    final top = [
+      for (final m in _monuments ?? const <Monument>[])
+        if (m.top) m,
+    ];
     return Scaffold(
       backgroundColor: Brand.cream,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: ListView(
+          padding: const EdgeInsets.only(top: 18, bottom: 24),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.asset(
-                    'assets/brand/logo.png',
-                    width: 62,
-                    filterQuality: FilterQuality.high,
-                    semanticLabel: Brand.name,
-                    errorBuilder: (_, _, _) =>
-                        const SizedBox(width: 62, height: 62),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: 'Bienvenid@ a\n',
-                            style: TextStyle(
-                              fontSize: 15,
-                              height: 1.3,
-                              fontWeight: FontWeight.w500,
-                              color: Brand.slate,
-                            ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          headerDateLabel(now, _temperature),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            letterSpacing: 1.4,
+                            fontWeight: FontWeight.w600,
+                            color: Brand.coral,
                           ),
-                          TextSpan(
-                            text: 'Maña Zaragoza',
-                            style: TextStyle(
-                              fontSize: 27,
-                              height: 1.1,
-                              fontWeight: FontWeight.w800,
-                              color: Brand.navy,
-                            ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${greetingFor(now)},\nmañ@',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            height: 1.12,
+                            fontWeight: FontWeight.w700,
+                            color: Brand.navy,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
+                  Image.asset(
+                    'assets/brand/logo.png',
+                    width: 40,
+                    filterQuality: FilterQuality.high,
+                    semanticLabel: Brand.name,
+                    errorBuilder: (_, _, _) => const SizedBox(width: 40),
+                  ),
+                  const SizedBox(width: 10),
                   IconButton(
                     tooltip: 'Ajustes',
-                    onPressed: () => _openSettings(context),
+                    onPressed: _openSettings,
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: Brand.navy,
@@ -169,38 +280,396 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Container(
-                width: 46,
-                height: 3,
-                decoration: BoxDecoration(
-                  color: Brand.coral,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+            ),
+            const SizedBox(height: 22),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  _Shortcut(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Agenda',
+                    color: Brand.sky,
+                    onTap: _openAgenda,
+                  ),
+                  _Shortcut(
+                    icon: Icons.auto_awesome_outlined,
+                    label: 'Para hoy',
+                    color: Brand.coral,
+                    onTap: _openSuggestions,
+                  ),
+                  _Shortcut(
+                    icon: Icons.account_balance_outlined,
+                    label: 'Patrimonio',
+                    color: Brand.navy,
+                    onTap: _openMonuments,
+                  ),
+                  _Shortcut(
+                    icon: Icons.restaurant_outlined,
+                    label: 'Comer',
+                    color: Brand.coral,
+                    onTap: () => _open(
+                      RestaurantsScreen(
+                        repository: widget.placesRepository,
+                        locationService: widget.locationService,
+                      ),
+                    ),
+                  ),
+                  _Shortcut(
+                    icon: Icons.health_and_safety_outlined,
+                    label: 'Servicios',
+                    color: const Color(0xFF2E9E6A),
+                    onTap: () => _open(
+                      UsefulServicesScreen(
+                        repository: widget.servicesRepository,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final cards = _cards(context);
-                    final fit =
-                        (constraints.maxHeight - _gap * (cards.length - 1)) /
-                        cards.length;
-                    final height = fit < _minCardHeight ? _minCardHeight : fit;
-                    return SingleChildScrollView(
-                      physics: fit < _minCardHeight
-                          ? null
-                          : const NeverScrollableScrollPhysics(),
-                      child: Column(
+            ),
+            // Hoy te recomendamos
+            if (_suggestions == null || _suggestions!.isNotEmpty) ...[
+              _BlockHeader(
+                title: 'Hoy te recomendamos',
+                action: 'Ver todo',
+                onAction: _openSuggestions,
+              ),
+              SizedBox(
+                height: 196,
+                child: _suggestions == null
+                    ? const _SkeletonRow(width: 150, height: 196)
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: _suggestions!.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final suggestion = _suggestions![index];
+                          return _SuggestionTile(
+                            suggestion: suggestion,
+                            now: now,
+                            onTap: () => _openEvent(suggestion.event),
+                          );
+                        },
+                      ),
+              ),
+            ],
+            // Rutas
+            _BlockHeader(
+              title: 'Rutas para descubrir Zaragoza',
+              action: 'Ver todas',
+              onAction: _openMonuments,
+            ),
+            _monuments == null
+                ? const SizedBox(
+                    height: 120,
+                    child: _SkeletonRow(width: 190, height: 120),
+                  )
+                : RoutesCarousel(
+                    monuments: _monuments!,
+                    height: 120,
+                    cardWidth: 190,
+                  ),
+            // Imprescindibles
+            if (_monuments == null || top.isNotEmpty) ...[
+              _BlockHeader(
+                title: 'Imprescindibles',
+                action: 'Ver todos',
+                onAction: _openMonuments,
+              ),
+              SizedBox(
+                height: 168,
+                child: _monuments == null
+                    ? const _SkeletonRow(width: 132, height: 168)
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: top.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) => _MonumentTile(
+                          monument: top[index],
+                          onTap: () =>
+                              _open(MonumentDetailScreen(monument: top[index])),
+                        ),
+                      ),
+              ),
+            ],
+            // Farmacias de guardia
+            if (_pharmacies != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                child: Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => _open(ServiceGroupScreen(group: _pharmacies!)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: Brand.line),
+                      ),
+                      child: Row(
                         children: [
-                          for (var i = 0; i < cards.length; i++) ...[
-                            if (i > 0) const SizedBox(height: _gap),
-                            SizedBox(height: height, child: cards[i]),
-                          ],
+                          const Icon(
+                            Icons.local_pharmacy_outlined,
+                            color: Color(0xFF2E9E6A),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _pharmacies!.items.length == 1
+                                  ? '1 farmacia de guardia hoy'
+                                  : '${_pharmacies!.items.length} farmacias de guardia hoy',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Brand.navy,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, color: Brand.slate),
                         ],
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Acceso compacto a una sección: icono en un cuadrado redondeado y nombre.
+class _Shortcut extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _Shortcut({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Brand.line),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0F0B2D4A),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: color, size: 26),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Brand.navy,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BlockHeader extends StatelessWidget {
+  final String title;
+  final String action;
+  final VoidCallback onAction;
+
+  const _BlockHeader({
+    required this.title,
+    required this.action,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Brand.navy,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(foregroundColor: Brand.coral),
+            child: Text(
+              action,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonRow extends StatelessWidget {
+  final double width;
+  final double height;
+
+  const _SkeletonRow({required this.width, required this.height});
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        children: [
+          for (var i = 0; i < 3; i++)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: SkeletonBox(width: width, height: height, radius: 18),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta pequeña de una actividad recomendada hoy.
+class _SuggestionTile extends StatelessWidget {
+  final DaySuggestion suggestion;
+  final DateTime now;
+  final VoidCallback onTap;
+
+  const _SuggestionTile({
+    required this.suggestion,
+    required this.now,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final event = suggestion.event;
+    final state = availabilityOf(event, now);
+    final tag = switch (state) {
+      Availability.running => 'Ahora',
+      Availability.upcoming =>
+        event.timeSlots.isEmpty
+            ? 'Hoy'
+            : event.timeSlots.first.split(' ').first,
+      _ => 'Hoy',
+    };
+    return SizedBox(
+      width: 150,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 104,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    EventImage(event: event),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: state == Availability.running
+                              ? Brand.coral
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          tag,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: state == Availability.running
+                                ? Colors.white
+                                : Brand.coral,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                child: Text(
+                  event.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: Brand.navy,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                child: Text(
+                  categoryLabel(event.category),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Brand.slate),
                 ),
               ),
             ],
@@ -211,165 +680,73 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Tarjeta con foto de fondo, banda de color a la izquierda y un círculo con
-/// flecha que invita a entrar.
-class _HomeCard extends StatelessWidget {
-  final String image;
-  final IconData icon;
-  final Color accent;
-  final String label;
-  final String title;
-  final String subtitle;
+/// Tarjeta pequeña de un monumento imprescindible.
+class _MonumentTile extends StatelessWidget {
+  final Monument monument;
   final VoidCallback onTap;
 
-  const _HomeCard({
-    required this.image,
-    required this.icon,
-    required this.accent,
-    required this.label,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  const _MonumentTile({required this.monument, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(26);
-    return Semantics(
-      button: true,
-      label: title,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x240B2D4A),
-              blurRadius: 26,
-              offset: Offset(0, 12),
-            ),
-          ],
+    const placeholder = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Brand.navy, Brand.navyLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: Material(
-            color: Brand.skyTint,
-            child: InkWell(
-              onTap: onTap,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    image,
+      ),
+      child: Center(
+        child: Icon(Icons.account_balance_outlined, color: Colors.white38),
+      ),
+    );
+    return SizedBox(
+      width: 132,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Material(
+          color: Brand.navy,
+          child: InkWell(
+            onTap: onTap,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (monument.image.isEmpty)
+                  placeholder
+                else
+                  Image.network(
+                    monument.image,
                     fit: BoxFit.cover,
-                    cacheWidth: 1000,
-                    errorBuilder: (_, _, _) =>
-                        const ColoredBox(color: Brand.skyTint),
+                    errorBuilder: (_, _, _) => placeholder,
                   ),
-                  // Velo ligero a la izquierda, para que el texto se lea bien.
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                        colors: [
-                          Color(0x8CFFFFFF),
-                          Color(0x33FFFFFF),
-                          Color(0x00FFFFFF),
-                        ],
-                        stops: [0.0, 0.5, 1.0],
-                      ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.35, 1.0],
+                      colors: [Color(0x000B2D4A), Color(0xE60B2D4A)],
                     ),
                   ),
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: 6,
-                    child: ColoredBox(color: accent),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 18, 18, 18),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(icon, size: 16, color: Brand.navy),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    label,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      letterSpacing: 2.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: Brand.navy,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 25,
-                                  height: 1.1,
-                                  fontWeight: FontWeight.w800,
-                                  color: Brand.navy,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              // Si no cabe (letra grande en el móvil), se
-                              // recorta antes que desbordar la tarjeta.
-                              Flexible(
-                                child: Text(
-                                  subtitle,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    height: 1.3,
-                                    color: Brand.slate,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: const BoxDecoration(
-                              color: Brand.navy,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0x330B2D4A),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.arrow_forward,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
+                ),
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  child: Text(
+                    monument.name,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

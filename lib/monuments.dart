@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'event_classifier.dart';
+import 'routes.dart';
 import 'ui_kit.dart';
 
 const String _monumentsUrl =
@@ -319,6 +320,29 @@ class _MonumentsScreenState extends State<MonumentsScreen> {
       final shown = filterMonuments(_all, filter: _filter, query: _query);
       body = CustomScrollView(
         slivers: [
+          if (_query.isEmpty && _filter == filterAll)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 18, bottom: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(22, 0, 22, 12),
+                      child: Text(
+                        'Rutas para descubrir Zaragoza',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: Brand.navy,
+                        ),
+                      ),
+                    ),
+                    RoutesCarousel(monuments: _all),
+                  ],
+                ),
+              ),
+            ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),

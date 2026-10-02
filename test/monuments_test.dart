@@ -179,8 +179,7 @@ void main() {
           home: HomeScreen(monumentsRepository: _FakeRepository(monuments)),
         ),
       );
-      await tester.scrollUntilVisible(find.text('Monumentos'), 100);
-      await tester.tap(find.text('Monumentos'));
+      await tester.tap(find.text('Patrimonio'));
       await tester.pumpAndSettle();
       expect(find.text('Monumentos y museos'), findsOneWidget);
       expect(find.text('Iglesia de San Pablo'), findsOneWidget);

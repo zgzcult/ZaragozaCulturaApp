@@ -35,7 +35,60 @@ void main() {
     final text = await rootBundle.loadString('assets/fonts/OFL.txt');
     yield LicenseEntryWithLineBreaks(['Montserrat'], text);
   });
+  // La app dibuja detrás de las barras del sistema (Android 15 lo impone) y
+  // pinta ella misma la franja de los botones de navegación.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const ZaragozaCulturaApp());
+}
+
+/// Reserva el espacio de los botones de navegación de Android y lo pinta de
+/// azul marino con los botones en claro: así ningún contenido queda debajo
+/// de ellos y siempre se distinguen del fondo crema.
+class SystemNavigationBarArea extends StatelessWidget {
+  final Widget child;
+
+  const SystemNavigationBarArea({super.key, required this.child});
+
+  static const SystemUiOverlayStyle style = SystemUiOverlayStyle(
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final bottom = media.viewPadding.bottom;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: style,
+      child: ColoredBox(
+        color: Brand.navy,
+        child: Column(
+          children: [
+            Expanded(
+              child: MediaQuery(
+                data: media
+                    .removeViewPadding(removeBottom: true)
+                    .removePadding(removeBottom: true)
+                    .copyWith(
+                      // El teclado ya cubre la franja reservada.
+                      viewInsets: media.viewInsets.copyWith(
+                        bottom: (media.viewInsets.bottom - bottom).clamp(
+                          0.0,
+                          double.infinity,
+                        ),
+                      ),
+                    ),
+                child: child,
+              ),
+            ),
+            SizedBox(height: bottom),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 String _isoDateKey(DateTime date) {
@@ -813,6 +866,7 @@ class ZaragozaCulturaApp extends StatelessWidget {
           ),
         ),
       ),
+      builder: (context, child) => SystemNavigationBarArea(child: child!),
       home: HomeScreen(
         repository: repository,
         locationService: locationService,
@@ -1527,10 +1581,10 @@ class _DateStripDelegate extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => 76;
+  double get minExtent => 62;
 
   @override
-  double get maxExtent => 126;
+  double get maxExtent => 80;
 
   @override
   Widget build(
@@ -1539,60 +1593,70 @@ class _DateStripDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     final progress = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
-    final cardHeight = 94 - (progress * 24);
-    final numberSize = 24 - (progress * 7);
+    final todayKey = _isoDateKey(DateTime.now());
     return Container(
       color: Brand.cream,
-      padding: EdgeInsets.only(top: 8 - (progress * 4), bottom: 8, left: 20),
+      padding: const EdgeInsets.only(top: 6, bottom: 6),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: dates.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 4),
         itemBuilder: (context, index) {
           final date = dates[index];
-          final selected = _isoDateKey(date) == _isoDateKey(selectedDate);
-          return GestureDetector(
-            onTap: () => onSelected(date),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: progress > .5 ? 58 : 74,
-              height: cardHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: selected ? Brand.navy : Colors.white,
-                borderRadius: BorderRadius.circular(progress > .5 ? 16 : 20),
-                border: Border.all(color: selected ? Brand.navy : Brand.line),
-                boxShadow: selected
-                    ? const [
-                        BoxShadow(
-                          color: Color(0x242463D9),
-                          blurRadius: 12,
-                          offset: Offset(0, 5),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _weekdayShort(date),
-                    style: TextStyle(
-                      fontSize: progress > .5 ? 10 : 12,
-                      fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : const Color(0xFF738196),
+          final key = _isoDateKey(date);
+          final selected = key == _isoDateKey(selectedDate);
+          final isToday = key == todayKey;
+          final dim = selected ? Colors.white70 : Brand.slate;
+          return Semantics(
+            button: true,
+            selected: selected,
+            label: _longDateLabel(date),
+            excludeSemantics: true,
+            child: GestureDetector(
+              onTap: () => onSelected(date),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                width: 46,
+                decoration: BoxDecoration(
+                  color: selected ? Brand.navy : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _weekdayShort(date),
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w600,
+                        color: dim,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: progress > .5 ? 2 : 6),
-                  Text(
-                    '${date.day}',
-                    style: TextStyle(
-                      fontSize: numberSize,
-                      fontWeight: FontWeight.w800,
-                      color: selected ? Colors.white : Brand.navy,
+                    SizedBox(height: 4 - progress * 2),
+                    Text(
+                      '${date.day}',
+                      style: TextStyle(
+                        fontSize: 18 - progress * 2,
+                        height: 1.0,
+                        fontWeight: FontWeight.w700,
+                        color: selected ? Colors.white : Brand.navy,
+                      ),
                     ),
-                  ),
-                ],
+                    SizedBox(height: 5 - progress * 2),
+                    // Punto coral para «hoy».
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isToday ? Brand.coral : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -2337,6 +2401,24 @@ Color _categoryColor(CulturalCategory category) {
   }
 }
 
+/// Imagen de una actividad, para usarla fuera de este archivo (portada).
+class EventImage extends StatelessWidget {
+  final CulturalEvent event;
+  final double iconSize;
+
+  const EventImage({super.key, required this.event, this.iconSize = 40});
+
+  @override
+  Widget build(BuildContext context) =>
+      _EventImage(event: event, iconSize: iconSize);
+}
+
+/// Nombre visible de una categoría («Música», «Teatro»...).
+String categoryLabel(CulturalCategory category) => _categoryLabel(category);
+
+/// Etiqueta de hora de una actividad («17:00 · 20:30»).
+String eventTimeLabel(CulturalEvent event) => _eventTimeLabel(event);
+
 /// Imagen de la actividad. Si no hay imagen o no carga, se muestra una
 /// ilustración con el color y el icono de su categoría.
 class _EventImage extends StatefulWidget {
@@ -2477,9 +2559,23 @@ class AboutScreen extends StatelessWidget {
               'Las imágenes proceden de la web del Ayuntamiento y pertenecen '
                   'a sus titulares. Cuando una actividad no tiene una imagen '
                   'propia se muestra una foto orientativa de Pexels '
-                  '(pexels.com), con el nombre de su autor. Las fotos de la '
+                  '(pexels.com), con el nombre de su autor. Las fotos de '
+                  'Actividades, Restaurantes y Sugerencia del día de la '
                   'pantalla principal también son de Pexels (Anna Nekrashevich, '
                   'David Vives y Misbaa Eri).',
+            ),
+            _section(
+              'Monumentos, rutas y servicios',
+              'Los monumentos, museos y rutas proceden del Ayuntamiento de '
+                  'Zaragoza y de Turismo de Zaragoza. Farmacias de guardia: '
+                  'Ayuntamiento de Zaragoza. Centros de salud: Servicio '
+                  'Aragonés de Salud (Sector Zaragoza II) y Gobierno de Aragón, '
+                  'Aragón Open Data (licencia CC BY 4.0).',
+            ),
+            _section(
+              'Temperatura',
+              '© AEMET. Información elaborada por la Agencia Estatal de '
+                  'Meteorología (estación de Zaragoza Aeropuerto).',
             ),
             _section(
               'Mapas y ubicación de los restaurantes',

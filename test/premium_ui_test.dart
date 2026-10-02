@@ -72,6 +72,34 @@ void main() {
     expect(find.byType(Hero), findsOneWidget);
   });
 
+  testWidgets(
+    'el corazón late con onda aunque el móvil reduzca las animaciones',
+    (tester) async {
+      await tester.pumpWidget(
+        const MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: MaterialApp(home: _CardHost()),
+        ),
+      );
+      final sizeBefore = tester.getSize(find.byType(FavoriteHeart));
+      await tester.tap(find.byType(FavoriteHeart));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      final scale = tester.widget<ScaleTransition>(
+        find.ancestor(
+          of: find.byIcon(Icons.favorite),
+          matching: find.byType(ScaleTransition),
+        ),
+      );
+      expect(scale.scale.value, greaterThan(1.2));
+      expect(find.byType(OverflowBox), findsOneWidget); // la onda
+      // La onda no cambia el tamaño del botón.
+      expect(tester.getSize(find.byType(FavoriteHeart)), sizeBefore);
+      await tester.pumpAndSettle();
+      expect(find.byType(OverflowBox), findsNothing);
+    },
+  );
+
   testWidgets('el corazón late y vibra al guardar un favorito', (tester) async {
     final haptics = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(

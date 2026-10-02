@@ -317,11 +317,7 @@ void main() {
       await tester.pumpWidget(const ZaragozaCulturaApp(repository: _Repo([])));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('Hoy te recomendamos esto'),
-        findsOneWidget,
-      ); // subtítulo del botón
-      await tester.tap(find.text('Sugerencia del día'));
+      await tester.tap(find.text('Para hoy'));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Hoy ya no quedan actividades'),

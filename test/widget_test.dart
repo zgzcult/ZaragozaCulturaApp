@@ -7,34 +7,39 @@ import 'package:zaragoza_cultura_app/main.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('La pantalla principal ofrece los tres accesos', (
+  testWidgets('La pantalla principal saluda y ofrece los accesos', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const ZaragozaCulturaApp());
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Bienvenid@ a'), findsOneWidget);
-    expect(find.textContaining('Maña Zaragoza'), findsOneWidget);
-    expect(find.text('Actividades'), findsOneWidget);
-    expect(find.text('Restaurantes'), findsOneWidget);
-    expect(find.text('Sugerencia del día'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'Buen(os|as) ')), findsOneWidget);
+    for (final label in [
+      'Agenda',
+      'Para hoy',
+      'Patrimonio',
+      'Comer',
+      'Servicios',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
   });
 
-  testWidgets('Actividades abre la agenda y se puede volver al inicio', (
+  testWidgets('Agenda abre la agenda y se puede volver al inicio', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const ZaragozaCulturaApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Actividades'));
+    await tester.tap(find.text('Agenda'));
     await tester.pumpAndSettle();
     expect(find.text('Agenda'), findsOneWidget);
     expect(find.byType(ListView), findsWidgets);
 
     await tester.tap(find.byTooltip('Inicio'));
     await tester.pumpAndSettle();
-    expect(find.text('Restaurantes'), findsOneWidget);
+    expect(find.text('Comer'), findsOneWidget);
   });
 }

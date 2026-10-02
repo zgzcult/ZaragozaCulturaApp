@@ -302,7 +302,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Actividades'));
+    await tester.tap(find.text('Agenda'));
     await tester.pumpAndSettle();
 
     for (final label in ['Agenda', 'Cerca de mí', 'Buscar', 'Favoritos']) {
