@@ -56,9 +56,8 @@ def get_events_from_db(days=None):
 _BASE_PLACE_FIELDS = ("id", "name", "address", "phone", "url", "lat", "lng")
 # Campos que se envían a la app de cada tipo de lugar.
 PLACE_FIELDS = {
-    "restaurante": _BASE_PLACE_FIELDS,
     "monumento": _BASE_PLACE_FIELDS
-    + ("description", "horario", "price", "datacion", "estilo", "styles", "museum", "top", "image"),
+    + ("description", "horario", "price", "datacion", "estilo", "styles", "museum", "top", "image", "updated"),
 }
 PLACE_KINDS = set(PLACE_FIELDS)
 PLACES_CACHE_SECONDS = 30 * 60  # los datos cambian cada dos días; así se ven pronto
@@ -66,7 +65,7 @@ _places_cache = {}
 
 
 def get_places_payload(kind):
-    """Lugares de un tipo (restaurantes, monumentos) en JSON compacto, con
+    """Lugares de un tipo (monumentos) en JSON compacto, con
     caché de 30 minutos."""
     hit = _places_cache.get(kind)
     if hit and time.time() - hit[0] < PLACES_CACHE_SECONDS:

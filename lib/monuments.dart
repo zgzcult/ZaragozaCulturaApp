@@ -11,7 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'event_classifier.dart';
-import 'routes.dart';
+import 'legal_notice.dart';
 import 'ui_kit.dart';
 
 const String _monumentsUrl =
@@ -46,6 +46,10 @@ class Monument {
   final double? lat;
   final double? lng;
 
+  /// Fecha (AAAA-MM-DD) de la última actualización de la ficha, según el
+  /// Ayuntamiento; vacía si no la indica.
+  final String updated;
+
   const Monument({
     required this.id,
     required this.name,
@@ -63,6 +67,7 @@ class Monument {
     this.url = '',
     this.lat,
     this.lng,
+    this.updated = '',
   });
 
   bool get hasLocation => lat != null && lng != null;
@@ -91,6 +96,7 @@ class Monument {
       url: text('url'),
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
+      updated: text('updated'),
     );
   }
 }
@@ -320,29 +326,6 @@ class _MonumentsScreenState extends State<MonumentsScreen> {
       final shown = filterMonuments(_all, filter: _filter, query: _query);
       body = CustomScrollView(
         slivers: [
-          if (_query.isEmpty && _filter == filterAll)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 18, bottom: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(22, 0, 22, 12),
-                      child: Text(
-                        'Rutas para descubrir Zaragoza',
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                          color: Brand.navy,
-                        ),
-                      ),
-                    ),
-                    RoutesCarousel(monuments: _all),
-                  ],
-                ),
-              ),
-            ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
@@ -432,6 +415,13 @@ class _MonumentsScreenState extends State<MonumentsScreen> {
                   monument: shown[index],
                   onTap: () => _open(shown[index]),
                 ),
+              ),
+            ),
+          if (shown.isNotEmpty)
+            SliverToBoxAdapter(
+              child: ReuseNotice(
+                service: 'Servicio de Cultura',
+                updated: latestDate(_all.map((m) => m.updated)),
               ),
             ),
         ],
@@ -901,10 +891,17 @@ class _MonumentDetailScreenState extends State<MonumentDetailScreen> {
                     ),
                   ],
                   const SizedBox(height: 22),
-                  const Text(
-                    'Texto, horarios e imagen: Ayuntamiento de Zaragoza. '
-                    'Consulta la ficha oficial antes de tu visita.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
+                  Text(
+                    originText(
+                      DateTime.tryParse(monument.updated),
+                      service: 'Servicio de Cultura',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF738196),
+                    ),
                   ),
                 ],
               ),

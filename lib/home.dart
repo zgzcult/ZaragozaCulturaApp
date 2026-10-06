@@ -1,6 +1,7 @@
 /// Pantalla principal de Maña Zaragoza: saludo según la hora, accesos
-/// compactos a las secciones y bloques deslizables con contenido del día
-/// (recomendaciones, rutas, monumentos imprescindibles y farmacias de guardia).
+/// compactos a las secciones (agenda, sugerencias, monumentos, rutas y
+/// servicios) y bloques deslizables con contenido del día (recomendaciones,
+/// rutas, monumentos imprescindibles y farmacias de guardia).
 library;
 
 import 'dart:convert';
@@ -13,7 +14,6 @@ import 'day_suggestion.dart';
 import 'main.dart';
 import 'monuments.dart';
 import 'nearby.dart';
-import 'restaurants.dart';
 import 'routes.dart';
 import 'ui_kit.dart';
 import 'useful_services.dart';
@@ -88,7 +88,6 @@ String headerDateLabel(DateTime now, int? temperature) {
 class HomeScreen extends StatefulWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
-  final PlacesRepository placesRepository;
   final MonumentsRepository monumentsRepository;
   final ServicesRepository servicesRepository;
   final WeatherRepository weatherRepository;
@@ -98,7 +97,6 @@ class HomeScreen extends StatefulWidget {
     super.key,
     this.repository = const ZaragozaEventsRepository(),
     this.locationService = const DeviceLocationService(),
-    this.placesRepository = const HttpPlacesRepository(),
     this.monumentsRepository = const HttpMonumentsRepository(),
     this.servicesRepository = const HttpServicesRepository(),
     this.weatherRepository = const HttpWeatherRepository(),
@@ -216,6 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openMonuments() =>
       _open(MonumentsScreen(repository: widget.monumentsRepository));
 
+  void _openRoutes() =>
+      _open(RoutesScreen(repository: widget.monumentsRepository));
+
   @override
   Widget build(BuildContext context) {
     final now = widget.clock();
@@ -300,20 +301,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   _Shortcut(
                     icon: Icons.account_balance_outlined,
-                    label: 'Patrimonio',
+                    label: 'Monumentos',
                     color: Brand.navy,
                     onTap: _openMonuments,
                   ),
                   _Shortcut(
-                    icon: Icons.restaurant_outlined,
-                    label: 'Comer',
-                    color: Brand.coral,
-                    onTap: () => _open(
-                      RestaurantsScreen(
-                        repository: widget.placesRepository,
-                        locationService: widget.locationService,
-                      ),
-                    ),
+                    icon: Icons.alt_route_outlined,
+                    label: 'Rutas',
+                    color: Brand.sky,
+                    onTap: _openRoutes,
                   ),
                   _Shortcut(
                     icon: Icons.health_and_safety_outlined,
@@ -359,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _BlockHeader(
               title: 'Rutas para descubrir Zaragoza',
               action: 'Ver todas',
-              onAction: _openMonuments,
+              onAction: _openRoutes,
             ),
             _monuments == null
                 ? const SizedBox(

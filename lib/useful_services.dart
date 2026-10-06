@@ -123,12 +123,6 @@ Uri serviceDirectionsLink(ServiceItem item) {
   });
 }
 
-/// Todas las farmacias cercanas, en Google Maps.
-final Uri allPharmaciesLink = Uri.https('www.google.com', '/maps/search/', {
-  'api': '1',
-  'query': 'farmacias cerca de mí',
-});
-
 List<ServiceItem> searchServices(List<ServiceItem> items, String query) {
   final words = normalizeForSearch(query)
       .split(' ')
@@ -195,17 +189,15 @@ Future<void> _launch(BuildContext context, Uri uri) async {
 
 IconData _groupIcon(String id) => switch (id) {
   'farmacias-guardia' => Icons.local_pharmacy_outlined,
-  'hospitales' => Icons.local_hospital_outlined,
   'centros-salud' => Icons.medical_services_outlined,
-  'policia-local' || 'policia-nacional' => Icons.local_police_outlined,
-  'aseos' => Icons.wc_outlined,
+  'bibliotecas' => Icons.local_library_outlined,
   _ => Icons.info_outline,
 };
 
 Color _groupColor(String id) => switch (id) {
   'farmacias-guardia' => const Color(0xFF2E9E6A),
-  'hospitales' || 'centros-salud' => Brand.coral,
-  'policia-local' || 'policia-nacional' => Brand.navy,
+  'centros-salud' => Brand.coral,
+  'bibliotecas' => Brand.navyLight,
   _ => Brand.sky,
 };
 
@@ -316,6 +308,8 @@ class _UsefulServicesScreenState extends State<UsefulServicesScreen> {
                     ? '${group.items.length} abiertas hoy'
                     : group.id == 'centros-salud'
                     ? '${group.items.length} centros'
+                    : group.id == 'bibliotecas'
+                    ? '${group.items.length} bibliotecas'
                     : '${group.items.length} lugares',
                 onTap: group.items.isEmpty
                     ? null
@@ -326,22 +320,13 @@ class _UsefulServicesScreenState extends State<UsefulServicesScreen> {
                         ),
                       ),
               ),
-              if (group.id == 'farmacias-guardia')
-                _GroupTile(
-                  icon: Icons.near_me_outlined,
-                  color: const Color(0xFF2E9E6A),
-                  title: 'Todas las farmacias',
-                  subtitle: 'Las más cercanas, en Google Maps',
-                  trailing: Icons.open_in_new,
-                  onTap: () => _launch(context, allPharmaciesLink),
-                ),
             ],
           ],
           const SizedBox(height: 14),
           const Text(
-            'Farmacias de guardia: Ayuntamiento de Zaragoza. Centros de salud: '
-            'Servicio Aragonés de Salud y Aragón Open Data. Antes de ir, '
-            'confirma el horario por teléfono.',
+            'Farmacias de guardia y bibliotecas: Ayuntamiento de Zaragoza. '
+            'Centros de salud: Servicio Aragonés de Salud y Aragón Open Data. '
+            'Antes de ir, confirma el horario por teléfono.',
             style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
           ),
         ],
@@ -431,7 +416,6 @@ class _GroupTile extends StatelessWidget {
   final Color color;
   final String title;
   final String subtitle;
-  final IconData trailing;
   final VoidCallback? onTap;
 
   const _GroupTile({
@@ -440,7 +424,6 @@ class _GroupTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.trailing = Icons.chevron_right,
   });
 
   @override
@@ -494,7 +477,8 @@ class _GroupTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (onTap != null) Icon(trailing, color: Brand.slate),
+                if (onTap != null)
+                  const Icon(Icons.chevron_right, color: Brand.slate),
               ],
             ),
           ),

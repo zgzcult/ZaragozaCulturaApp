@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'brand.dart';
 import 'monuments.dart';
+import 'ui_kit.dart';
 
 class RouteStop {
   /// Id del monumento en el listado oficial, o null si la parada es un lugar
@@ -261,7 +262,130 @@ Uri? routeMapsLink(List<ResolvedStop> stops) {
 // Interfaz
 // ---------------------------------------------------------------------------
 
-/// Carrusel de rutas para la cabecera de «Monumentos y museos».
+/// Pantalla de rutas: una tarjeta por ruta.
+class RoutesScreen extends StatefulWidget {
+  final MonumentsRepository repository;
+
+  const RoutesScreen({
+    super.key,
+    this.repository = const HttpMonumentsRepository(),
+  });
+
+  @override
+  State<RoutesScreen> createState() => _RoutesScreenState();
+}
+
+class _RoutesScreenState extends State<RoutesScreen> {
+  List<Monument> _monuments = const [];
+  bool _loading = true;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = _monuments.isEmpty;
+      _failed = false;
+    });
+    final cached = await widget.repository.loadCached();
+    if (!mounted) return;
+    if (cached.isNotEmpty) {
+      setState(() {
+        _monuments = cached;
+        _loading = false;
+      });
+    }
+    final fresh = await widget.repository.fetchFresh();
+    if (!mounted) return;
+    setState(() {
+      if (fresh != null) _monuments = fresh;
+      _failed = fresh == null && _monuments.isEmpty;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget body;
+    if (_loading) {
+      body = const SkeletonList(count: 4);
+    } else if (_failed) {
+      body = Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'No se pudieron cargar las rutas. Comprueba tu conexión.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Brand.slate, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(onPressed: _load, child: const Text('Reintentar')),
+            ],
+          ),
+        ),
+      );
+    } else {
+      body = ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16),
+            child: Text(
+              'Recorridos a pie por la historia de la ciudad, basados en las '
+              'rutas oficiales de Turismo de Zaragoza.',
+              style: TextStyle(color: Brand.slate, height: 1.45),
+            ),
+          ),
+          for (final route in cityRoutes) _routeCard(route),
+        ],
+      );
+    }
+    return Scaffold(
+      backgroundColor: Brand.cream,
+      appBar: AppBar(title: const Text('Rutas')),
+      body: body,
+    );
+  }
+
+  Widget _routeCard(CityRoute route) {
+    final stops = resolveStops(route, _monuments);
+    final cover = stops
+        .map((s) => s.monument)
+        .whereType<Monument>()
+        .firstWhere(
+          (m) => m.image.isNotEmpty,
+          orElse: () => const Monument(id: '', name: ''),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: SizedBox(
+        height: 168,
+        child: _RouteCard(
+          route: route,
+          stopsCount: stops.length,
+          image: cover.image,
+          width: double.infinity,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  RouteDetailScreen(route: route, monuments: _monuments),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Carrusel de rutas para la portada.
 class RoutesCarousel extends StatelessWidget {
   final List<Monument> monuments;
   final double height;

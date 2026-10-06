@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Lugares de interés (restaurantes, monumentos y museos) desde los datos
-abiertos del Ayuntamiento.
+"""Monumentos y museos desde los datos abiertos del Ayuntamiento.
 
-Descarga los listados de zaragoza.es/sede/servicio/restaurante y /monumento,
+Descarga el listado de zaragoza.es/sede/servicio/monumento,
 convierte sus coordenadas (UTM ED50) a latitud/longitud y los guarda en MongoDB
 (colección `places`) para que el servidor los entregue a la app.
 
@@ -34,7 +33,6 @@ HEADERS = {"User-Agent": "ZaragozaCulturaApp/1.0", "Accept": "application/json"}
 
 KINDS = {
     # min: si se descargan menos, algo ha fallado y no se guarda nada.
-    "restaurante": {"endpoint": "restaurante", "prefix": "restaurante", "min": 200},
     "monumento": {"endpoint": "monumento", "prefix": "monumento", "min": 100},
 }
 
@@ -100,7 +98,7 @@ def _from_ecef(x: float, y: float, z: float, a: float, f: float) -> Tuple[float,
 def ed50_utm_to_latlng(easting: float, northing: float, zone: int = 30) -> Tuple[float, float]:
     """UTM ED50 (EPSG:23030) -> (latitud, longitud) WGS84, en grados.
 
-    Los datos abiertos del Ayuntamiento de Zaragoza (restaurantes, monumentos)
+    Los datos abiertos del Ayuntamiento de Zaragoza (monumentos y otros equipamientos)
     usan el sistema antiguo ED50, no ETRS89: tratarlos como ETRS89 desplaza
     los puntos unos 250 m. Se aplica la transformación de Helmert de 7
     parámetros para la España peninsular (precisión de ~0,5 m frente a PROJ).
@@ -122,10 +120,9 @@ _SMALL_WORDS = {"de", "del", "la", "las", "el", "los", "y", "e", "o", "en", "a",
 
 
 def clean_name(raw: str) -> str:
-    """«RESTAURANTE EL CACHIRULO» -> «El Cachirulo». Respeta los nombres que ya
-    vienen en mayúsculas y minúsculas."""
+    """«TORRE DEL AGUA» -> «Torre del Agua». Respeta los nombres que ya vienen
+    en mayúsculas y minúsculas."""
     name = re.sub(r"\s+", " ", (raw or "").strip())
-    name = re.sub(r"^(restaurante|rte\.?|bar restaurante)\s+", "", name, flags=re.I)
     if not name:
         return ""
     if name.isupper() or name.islower():
@@ -172,13 +169,14 @@ def normalize_place(kind: str, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
     lat, lng = _coordinates(raw)
 
-    # Restaurantes: «streetAddress»; monumentos: «address».
+    # Según el conjunto de datos: «streetAddress» o «address».
     street = _text(raw.get("streetAddress")) or _text(raw.get("address"))
     postal = _text(raw.get("postalCode"))
     address = ", ".join(p for p in (street, postal) if p)
     if lat is None and not street:
         return None
-    tel = raw.get("tel")
+    # Según el conjunto de datos: «tel» (texto o {"tel": ...}) o «phone».
+    tel = raw.get("tel") or raw.get("phone")
     phone = _text(tel.get("tel")) if isinstance(tel, dict) else _text(tel)
     url = _text(raw.get("url"))
     if url and not re.match(r"https?://", url, re.I):
@@ -274,7 +272,6 @@ def monument_details(raw: Dict[str, Any]) -> Dict[str, Any]:
     estilo, foto y página oficial del Ayuntamiento."""
     estilo = _text(raw.get("estilo"))
     title = _text(raw.get("title"))
-    tel = raw.get("phone")
     return {
         "description": html_to_text(raw.get("description")),
         "horario": html_to_text(raw.get("horario")),
@@ -286,7 +283,9 @@ def monument_details(raw: Dict[str, Any]) -> Dict[str, Any]:
         "top": raw.get("top") == "S",
         "image": https_url(raw.get("image")),
         "url": https_url(raw.get("uri")),
-        "phone": _text(tel) if isinstance(tel, str) else "",
+        # Fecha de la última actualización según el Ayuntamiento (AAAA-MM-DD);
+        # vacía si la ficha no la trae.
+        "updated": _text(raw.get("lastUpdated")).split("T")[0],
     }
 
 
@@ -405,10 +404,12 @@ def geocode_places(
     now = now or datetime.now(timezone.utc)
     stats: Dict[str, Any] = {"placed": 0, "from_cache": 0, "not_found": 0, "errors": 0, "calls": 0}
     new_entries: Dict[str, Dict[str, Any]] = {}
+    used_keys: set = set()
     for place in places:
         if place.get("lat") is not None or not place.get("street"):
             continue
         key = f"{GEOCODE_VERSION}|{clean_address(place['street']).lower()}|{place.get('postal', '')}"
+        used_keys.add(key)
         entry = cache.get(key)
         if entry is not None:
             if entry.get("found"):
@@ -443,6 +444,7 @@ def geocode_places(
         cache[key] = record
         new_entries[key] = record
     stats["new_entries"] = new_entries
+    stats["used_keys"] = used_keys
     return stats
 
 
@@ -504,6 +506,28 @@ def save(kind: str, places: List[Dict[str, Any]], collection) -> None:
     print(f"[OK] Limpieza: {len(stale)} lugares obsoletos eliminados.")
 
 
+# Tipos que ya no se ofrecen y hay que borrar de la base de datos.
+LEGACY_KINDS = ("restaurante",)
+
+
+def purge_legacy(collection, kinds=LEGACY_KINDS) -> int:
+    """Borra los lugares de tipos que la aplicación ya no ofrece. Devuelve
+    cuántos había."""
+    count = collection.count_documents({"type": {"$in": list(kinds)}})
+    if count:
+        collection.delete_many({"type": {"$in": list(kinds)}})
+    return count
+
+
+def prune_geocode_cache(collection, used_keys) -> int:
+    """Quita de la caché de ubicaciones lo que ya no usa ningún lugar (p. ej.
+    las direcciones de los tipos retirados). Devuelve cuántas quitó."""
+    stale = [doc["_id"] for doc in collection.find({}, {"_id": 1}) if doc["_id"] not in used_keys]
+    if stale:
+        collection.delete_many({"_id": {"$in": stale}})
+    return len(stale)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="solo muestra un resumen, sin guardar")
@@ -529,11 +553,18 @@ def main() -> int:
 
         client = MongoClient(uri, serverSelectionTimeoutMS=10000)
         database = client["zaragoza_cultura"]
+        removed = purge_legacy(database["places"])
+        if removed:
+            print(f"[OK] Eliminados {removed} lugares de tipos retirados (restaurantes).")
         # Ubicación por dirección para los que no traen coordenadas.
         cache = {doc["_id"]: doc for doc in database["geocode_cache"].find({})}
         stats = geocode_places(places, cache)
         for key, record in stats["new_entries"].items():
             database["geocode_cache"].replace_one({"_id": key}, {"_id": key, **record}, upsert=True)
+        if stats["errors"] == 0 and stats["calls"] < 3000:
+            pruned = prune_geocode_cache(database["geocode_cache"], stats["used_keys"])
+            if pruned:
+                print(f"[OK] Caché de ubicaciones: {pruned} entradas sin uso eliminadas.")
         print(
             f"[OK] Ubicados por dirección: {stats['placed']} ({stats['from_cache']} de la caché, "
             f"{stats['calls']} consultas); sin resultado: {stats['not_found']}; errores: {stats['errors']}."

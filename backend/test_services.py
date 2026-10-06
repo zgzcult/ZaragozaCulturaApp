@@ -78,10 +78,16 @@ class NormalizeTests(unittest.TestCase):
 
 
 class CollectTests(unittest.TestCase):
-    def test_solo_farmacias_de_guardia_y_centros_de_salud(self):
+    def test_farmacias_de_guardia_centros_de_salud_y_bibliotecas(self):
         data = services.collect_services(lambda url: {"result": [FARMACIA, FARMACIA]})
-        self.assertEqual([g["id"] for g in data["groups"]], ["farmacias-guardia", "centros-salud"])
+        self.assertEqual(
+            [g["id"] for g in data["groups"]],
+            ["farmacias-guardia", "centros-salud", "bibliotecas"],
+        )
         self.assertEqual(data["groups"][1]["title"], "Centros Salud Públicos")
+        self.assertEqual(data["groups"][2]["title"], "Bibliotecas municipales")
+        # Ya no hay servicios de policía, aseos ni hospitales.
+        self.assertNotIn("policia-local", [g["id"] for g in data["groups"]])
         self.assertEqual(len(data["groups"][0]["items"]), 1)  # sin duplicados
 
     def test_si_falla_el_ayuntamiento_los_centros_de_salud_siguen(self):
@@ -113,7 +119,48 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(oliver["call"], "976346359")
         self.assertIn("Sector Zaragoza III", oliver["info"])
         self.assertNotIn("Cita previa", oliver["info"])  # la fuente no la indica
-        self.assertTrue(oliver["url"].startswith("https://opendata.aragon.es/"))
+        # Enlaza a la página pública del sector, no al conjunto de datos
+        # abiertos (que exige identificación).
+        self.assertEqual(
+            oliver["url"],
+            "https://www.aragon.es/sanidad-profesionales/centros-sanitarios/sector-sanitario-zaragoza-iii",
+        )
+        self.assertTrue(items["Picarral"]["url"].endswith("sector-sanitario-zaragoza-i"))
+        for item in items.values():
+            self.assertNotIn("opendata", item["url"])
+
+
+class LibraryTests(unittest.TestCase):
+    def fetch(self, url):
+        if url.endswith("/equipamiento/916.json"):
+            return {"horario": "<ul><li>Lunes: de 15 a 21 h.</li><li>Sábados: de 9.30 a 14 h.</li></ul>"}
+        raise OSError("sin respuesta")
+
+    def test_27_bibliotecas_con_su_ficha_oficial(self):
+        items = {i["name"]: i for i in services.libraries(self.fetch)}
+        self.assertEqual(len(items), 27)
+        jarnes = items["Biblioteca Benjamín Jarnés (Actur-Rey Fernando)"]
+        self.assertEqual(jarnes["address"], "Calle Pedro Laín Entralgo 15, 50018 Zaragoza")
+        self.assertEqual(jarnes["call"], "976726108")
+        self.assertEqual(jarnes["url"], "https://www.zaragoza.es/sede/servicio/equipamiento/916")
+        self.assertEqual(jarnes["horario"], "• Lunes: de 15 a 21 h.\n• Sábados: de 9.30 a 14 h.")
+
+    def test_si_la_ficha_no_responde_se_muestra_sin_horario(self):
+        items = services.libraries(self.fetch)
+        otras = [i for i in items if not i["url"].endswith("/916")]
+        self.assertTrue(all(i["horario"] == "" for i in otras))
+        self.assertTrue(all(i["call"] for i in items))
+
+    def test_datos_corregidos_con_la_web_oficial(self):
+        items = {i["name"]: i for i in services.libraries(self.fetch)}
+        self.assertEqual(items["Biblioteca de Casetas"]["call"], "876536521")
+        self.assertIn("Andrés Gimeno 1,", items["Biblioteca de Montañana"]["address"])
+        self.assertIn("Biblioteca Andresa Casamayor (Rosales del Canal)", items)
+
+    def test_sin_mapas_ni_coordenadas(self):
+        for item in services.libraries(self.fetch):
+            self.assertIsNone(item["lat"])
+            self.assertTrue(item["id"].startswith("bibliotecas-"))
 
 
 class ServerCacheTests(unittest.TestCase):

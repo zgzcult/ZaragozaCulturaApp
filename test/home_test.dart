@@ -120,8 +120,8 @@ void main() {
     for (final label in [
       'Agenda',
       'Para hoy',
-      'Patrimonio',
-      'Comer',
+      'Monumentos',
+      'Rutas',
       'Servicios',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);

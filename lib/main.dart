@@ -13,9 +13,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'ads.dart';
 import 'event_classifier.dart';
 import 'home.dart';
+import 'legal_notice.dart';
 import 'nearby.dart';
 import 'reminders.dart';
-import 'restaurants.dart';
 import 'suggestion.dart';
 import 'brand.dart';
 import 'ui_kit.dart';
@@ -97,19 +97,6 @@ String _isoDateKey(DateTime date) {
     date.month,
     date.day,
   ).toIso8601String().split('T').first;
-}
-
-String _dateLabel(DateTime date) {
-  final weekday = <String>[
-    'Lun',
-    'Mar',
-    'Mié',
-    'Jue',
-    'Vie',
-    'Sáb',
-    'Dom',
-  ][date.weekday - 1];
-  return '$weekday\n${date.day}';
 }
 
 String _longDateLabel(DateTime date) {
@@ -776,13 +763,11 @@ class FavoritesStorage {
 class ZaragozaCulturaApp extends StatelessWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
-  final PlacesRepository placesRepository;
 
   const ZaragozaCulturaApp({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
     this.locationService = const DeviceLocationService(),
-    this.placesRepository = const HttpPlacesRepository(),
   });
 
   @override
@@ -870,7 +855,6 @@ class ZaragozaCulturaApp extends StatelessWidget {
       home: HomeScreen(
         repository: repository,
         locationService: locationService,
-        placesRepository: placesRepository,
       ),
     );
   }
@@ -1260,8 +1244,18 @@ class _AgendaScreenState extends State<AgendaScreen> {
           }, childCount: items.length),
         ),
       ),
+      _reuseNoticeSliver(),
     ];
   }
+
+  /// Condiciones de reutilización de la información del Ayuntamiento, al
+  /// final de las listas de actividades.
+  Widget _reuseNoticeSliver() => SliverToBoxAdapter(
+    child: ReuseNotice(
+      service: 'Servicio de Cultura',
+      updated: latestDate(_events.map((e) => e.updatedAt)),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1539,6 +1533,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                             }, childCount: withAds(filteredEvents.length)),
                           ),
                         ),
+                      if (filteredEvents.isNotEmpty) _reuseNoticeSliver(),
                     ],
                   ],
                 ),
@@ -2555,20 +2550,26 @@ class AboutScreen extends StatelessWidget {
                   'antes de acudir.',
             ),
             _section(
+              'Reutilización de la información',
+              'La información del Ayuntamiento de Zaragoza se reproduce sin '
+                  'alterar su sentido y con indicación de su origen y de la '
+                  'fecha de su última actualización, conforme a las '
+                  'condiciones generales para la reutilización de su aviso '
+                  'legal. Esta aplicación es independiente: no está '
+                  'patrocinada ni respaldada por el Ayuntamiento de Zaragoza.',
+            ),
+            _section(
               'Imágenes',
               'Las imágenes proceden de la web del Ayuntamiento y pertenecen '
                   'a sus titulares. Cuando una actividad no tiene una imagen '
                   'propia se muestra una foto orientativa de Pexels '
-                  '(pexels.com), con el nombre de su autor. Las fotos de '
-                  'Actividades, Restaurantes y Sugerencia del día de la '
-                  'pantalla principal también son de Pexels (Anna Nekrashevich, '
-                  'David Vives y Misbaa Eri).',
+                  '(pexels.com), con el nombre de su autor.',
             ),
             _section(
               'Monumentos, rutas y servicios',
               'Los monumentos, museos y rutas proceden del Ayuntamiento de '
-                  'Zaragoza y de Turismo de Zaragoza. Farmacias de guardia: '
-                  'Ayuntamiento de Zaragoza. Centros de salud: Servicio '
+                  'Zaragoza y de Turismo de Zaragoza. Farmacias de guardia y '
+                  'bibliotecas: Ayuntamiento de Zaragoza. Centros de salud: Servicio '
                   'Aragonés de Salud (Sector Zaragoza II) y Gobierno de Aragón, '
                   'Aragón Open Data (licencia CC BY 4.0).',
             ),
@@ -2578,13 +2579,14 @@ class AboutScreen extends StatelessWidget {
                   'Meteorología (estación de Zaragoza Aeropuerto).',
             ),
             _section(
-              'Mapas y ubicación de los restaurantes',
-              'Los mapas son de OpenStreetMap (© colaboradores de '
-                  'OpenStreetMap). La ubicación de algunos restaurantes se '
-                  'calcula a partir de su dirección con CartoCiudad (Instituto '
-                  'Geográfico Nacional); el resto usa las coordenadas del '
-                  'Ayuntamiento de Zaragoza. Pueden tener pequeños errores: '
-                  'comprueba siempre la dirección.',
+              'Mapas y ubicación',
+              'Los mapas de «Cerca de mí» son de OpenStreetMap (© '
+                  'colaboradores de OpenStreetMap). En las rutas, la '
+                  'ubicación de algunos monumentos se calcula a partir de su '
+                  'dirección con CartoCiudad (Instituto Geográfico Nacional); '
+                  'el resto usa las coordenadas del Ayuntamiento de Zaragoza. '
+                  'Pueden tener pequeños errores: comprueba siempre la '
+                  'dirección.',
             ),
             OutlinedButton.icon(
               onPressed: () => launchUrl(
@@ -2592,7 +2594,7 @@ class AboutScreen extends StatelessWidget {
                 mode: LaunchMode.externalApplication,
               ),
               icon: const Icon(Icons.gavel_outlined),
-              label: const Text('Aviso legal del Ayuntamiento'),
+              label: const Text('Condiciones generales para la reutilización'),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(

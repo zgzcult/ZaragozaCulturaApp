@@ -1,0 +1,250 @@
+{
+  "checked": "2026-10-05",
+  "source": "https://www.zaragoza.es/sede/portal/bibliotecas-municipales/centros",
+  "sourceName": "Ayuntamiento de Zaragoza · Bibliotecas Municipales",
+  "bibliotecas": [
+    {
+      "id": 29611,
+      "name": "Biblioteca Andresa Casamayor (Rosales del Canal)",
+      "address": "Calle Richard Wagner 2",
+      "postal": "50012",
+      "town": "Zaragoza",
+      "phone": "976 72 62 18",
+      "email": "bibliotecas-rosales@zaragoza.es"
+    },
+    {
+      "id": 916,
+      "name": "Biblioteca Benjamín Jarnés (Actur-Rey Fernando)",
+      "address": "Calle Pedro Laín Entralgo 15",
+      "postal": "50018",
+      "town": "Zaragoza",
+      "phone": "976 726 108",
+      "email": "bibliotecas-bjarnes@zaragoza.es"
+    },
+    {
+      "id": 929,
+      "name": "Biblioteca de Casetas",
+      "address": "Calle Del Palacio 15",
+      "postal": "50620",
+      "town": "Zaragoza",
+      "phone": "876 536 521",
+      "email": "bibliotecas-casetas@zaragoza.es"
+    },
+    {
+      "id": 914,
+      "name": "Biblioteca de Montañana",
+      "address": "Calle Andrés Gimeno 1",
+      "postal": "50059",
+      "town": "Zaragoza",
+      "phone": "976 239 399",
+      "email": "bibliotecas-montanana@zaragoza.es"
+    },
+    {
+      "id": 927,
+      "name": "Biblioteca de Monzalbarba",
+      "address": "Calle Gaspar de Pex 12-14",
+      "postal": "50120",
+      "town": "Zaragoza",
+      "phone": "976 772 893",
+      "email": "bibliotecas-monzalbarba@zaragoza.es"
+    },
+    {
+      "id": 2088,
+      "name": "Biblioteca de Movera",
+      "address": "Plaza Mayor 1",
+      "postal": "50194",
+      "town": "Zaragoza",
+      "phone": "976 726 173",
+      "email": "bibliotecas-movera@zaragoza.es"
+    },
+    {
+      "id": 909,
+      "name": "Biblioteca de San Juan de Mozarrifar",
+      "address": "Plaza España 9",
+      "postal": "50820",
+      "town": "Zaragoza",
+      "phone": "976 726 223",
+      "email": "bibliotecas-sanjuan@zaragoza.es"
+    },
+    {
+      "id": 918,
+      "name": "Biblioteca Fernando Lázaro Carreter (Torrero)",
+      "address": "Calle Monzón 3",
+      "postal": "50007",
+      "town": "Zaragoza",
+      "phone": "976 726 035",
+      "email": "bibliotecas-flcarreter@zaragoza.es"
+    },
+    {
+      "id": 20559,
+      "name": "Biblioteca Félix Romeo (Parque Goya)",
+      "address": "Plaza de la Poesía 3",
+      "postal": "50018",
+      "town": "Zaragoza",
+      "phone": "876 281 341",
+      "email": "bibliotecas-parquegoya@zaragoza.es"
+    },
+    {
+      "id": 910,
+      "name": "Biblioteca Inocencio Ruiz Lasala (Santa Isabel)",
+      "address": "Calle El Baile 6",
+      "postal": "50058",
+      "town": "Zaragoza",
+      "phone": "976 726 021",
+      "email": "bibliotecas-santaisabel@zaragoza.es"
+    },
+    {
+      "id": 913,
+      "name": "Biblioteca Javier Tomeo (El Rabal)",
+      "address": "Plaza San Gregorio s/n",
+      "postal": "50015",
+      "town": "Zaragoza",
+      "phone": "976 724 028",
+      "email": "bibliotecas-jtomeo@zaragoza.es"
+    },
+    {
+      "id": 924,
+      "name": "Biblioteca Jesús Mª Alemany Briz (Casablanca)",
+      "address": "Calle Viñedo Viejo 1 (Centro Cívico)",
+      "postal": "50009",
+      "town": "Zaragoza",
+      "phone": "976 726 006",
+      "email": "bibliotecas-casablanca@zaragoza.es"
+    },
+    {
+      "id": 919,
+      "name": "Biblioteca José Antonio Rey del Corral (San José)",
+      "address": "Plaza Mayor 2",
+      "postal": "50008",
+      "town": "Zaragoza",
+      "phone": "976 726 066",
+      "email": "bibliotecas-reydelcorral@zaragoza.es"
+    },
+    {
+      "id": 20558,
+      "name": "Biblioteca José Martí (Valdespartera)",
+      "address": "Ciudadano Kane 13",
+      "postal": "50019",
+      "town": "Zaragoza",
+      "phone": "876 281 340",
+      "email": "bibliotecas-valdespartera@zaragoza.es"
+    },
+    {
+      "id": 920,
+      "name": "Biblioteca José Ramón Arana (Garrapinillos)",
+      "address": "Plaza José Ramón Arana 1",
+      "postal": "50190",
+      "town": "Zaragoza",
+      "phone": "976 726 141",
+      "email": "bibliotecas-garrapinillos@zaragoza.es"
+    },
+    {
+      "id": 926,
+      "name": "Biblioteca Luis del Val (Valdefierro)",
+      "address": "Plaza de la Inmaculada 3",
+      "postal": "50012",
+      "town": "Zaragoza",
+      "phone": "976 726 365",
+      "email": "bibliotecas-valdefierro@zaragoza.es"
+    },
+    {
+      "id": 2405,
+      "name": "Biblioteca Manuel Alvar (Delicias)",
+      "address": "Parque Delicias Pabellón El Pilar",
+      "postal": "50017",
+      "town": "Zaragoza",
+      "phone": "976 726 128",
+      "email": "bibliotecas-malvar@zaragoza.es"
+    },
+    {
+      "id": 2194,
+      "name": "Biblioteca María Moliner (Casco Histórico)",
+      "address": "Plaza San Agustín 1",
+      "postal": "50001",
+      "town": "Zaragoza",
+      "phone": "976 723 680",
+      "email": "bibliotecas-mmoliner@zaragoza.es"
+    },
+    {
+      "id": 928,
+      "name": "Biblioteca Miguel de Cervantes (Universidad)",
+      "address": "Calle Eduardo Ibarra s/n",
+      "postal": "50006",
+      "town": "Zaragoza",
+      "phone": "976 553 234",
+      "email": "bibliotecas-cervantes@zaragoza.es"
+    },
+    {
+      "id": 917,
+      "name": "Biblioteca Miguel Labordeta (La Cartuja)",
+      "address": "Calle Autonomía de Aragón 21",
+      "postal": "50720",
+      "town": "Zaragoza",
+      "phone": "976 726 178",
+      "email": "bibliotecas-cartujabaja@zaragoza.es"
+    },
+    {
+      "id": 4946,
+      "name": "Biblioteca para Jóvenes Cubit",
+      "address": "Calle Mas de las Matas 20",
+      "postal": "50015",
+      "town": "Zaragoza",
+      "phone": "976 724 615",
+      "email": "bibliotecas-bjcubit@zaragoza.es"
+    },
+    {
+      "id": 2089,
+      "name": "Biblioteca Rafael Andolz (Almozara)",
+      "address": "Avenida Puerta Sancho 30",
+      "postal": "50003",
+      "town": "Zaragoza",
+      "phone": "976 726 101",
+      "email": "bibliotecas-randolz@zaragoza.es"
+    },
+    {
+      "id": 912,
+      "name": "Biblioteca Ricardo Magdalena (Las Fuentes)",
+      "address": "Avenida Miguel Servet 57",
+      "postal": "50013",
+      "town": "Zaragoza",
+      "phone": "976 724 037",
+      "email": "bibliotecas-rmagdalena@zaragoza.es"
+    },
+    {
+      "id": 907,
+      "name": "Biblioteca Rosendo Tello (Peñaflor)",
+      "address": "Calle La Tajada 11",
+      "postal": "50193",
+      "town": "Zaragoza",
+      "phone": "976 726 161",
+      "email": "bibliotecas-penaflor@zaragoza.es"
+    },
+    {
+      "id": 921,
+      "name": "Biblioteca Santa Orosia (Delicias)",
+      "address": "Calle Santa Orosia 2",
+      "postal": "50010",
+      "town": "Zaragoza",
+      "phone": "976 721 061",
+      "email": "bibliotecas-staorosia@zaragoza.es"
+    },
+    {
+      "id": 925,
+      "name": "Biblioteca Soledad Puértolas (Miralbueno)",
+      "address": "Parque Paco Lacasa 1",
+      "postal": "50011",
+      "town": "Zaragoza",
+      "phone": "976 726 091",
+      "email": "bibliotecas-miralbueno@zaragoza.es"
+    },
+    {
+      "id": 911,
+      "name": "Biblioteca Vientos del Pueblo (Oliver)",
+      "address": "Calle Antonio de Leyva 87",
+      "postal": "50011",
+      "town": "Zaragoza",
+      "phone": "976 726 094",
+      "email": "bibliotecas-oliver@zaragoza.es"
+    }
+  ]
+}

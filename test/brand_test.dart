@@ -109,7 +109,7 @@ void main() {
   testWidgets('«Acerca de» ofrece las licencias de código abierto', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(400, 2400));
+    await tester.binding.setSurfaceSize(const Size(400, 4000));
     await tester.pumpWidget(const MaterialApp(home: AboutScreen()));
     expect(find.text('Licencias de código abierto'), findsOneWidget);
     expect(find.textContaining('CartoCiudad'), findsOneWidget);

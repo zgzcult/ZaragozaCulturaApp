@@ -1,8 +1,10 @@
-"""«Servicios útiles»: farmacias de guardia (datos abiertos del Ayuntamiento
-de Zaragoza) y centros de salud públicos (Servicio Aragonés de Salud).
+"""«Servicios útiles»: farmacias de guardia y bibliotecas municipales (datos
+del Ayuntamiento de Zaragoza) y centros de salud públicos (Servicio Aragonés
+de Salud y Gobierno de Aragón).
 
-El servidor descarga las farmacias directamente (con caché), así están
-siempre al día sin depender del workflow.
+El servidor descarga las farmacias de guardia y los horarios de las
+bibliotecas directamente (con caché), así están siempre al día sin depender
+del workflow.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import os
 import re
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -25,6 +28,7 @@ HEADERS = {"User-Agent": "ZaragozaCulturaApp/1.0", "Accept": "application/json"}
 GROUPS = [
     {"id": "farmacias-guardia", "title": "Farmacias de guardia", "source": "farmacia"},
     {"id": "centros-salud", "title": "Centros Salud Públicos", "source": "centros_salud"},
+    {"id": "bibliotecas", "title": "Bibliotecas municipales", "source": "bibliotecas"},
 ]
 
 # Centros de salud públicos de Zaragoza capital: Sector II del listado del
@@ -66,6 +70,55 @@ def health_centres(path: str = CENTROS_SALUD_FILE) -> List[Dict[str, Any]]:
             }
         )
     return items
+
+# Bibliotecas Públicas Municipales: listado y ficha oficial de cada una (ver
+# «source» en el fichero). El horario se pide en vivo a la ficha oficial,
+# porque cambia con las estaciones.
+BIBLIOTECAS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bibliotecas.json")
+
+
+def libraries(
+    fetch: Callable[[str], Any],
+    path: str = BIBLIOTECAS_FILE,
+    workers: int = 8,
+) -> List[Dict[str, Any]]:
+    """Bibliotecas con su horario oficial. Si la ficha de alguna no responde,
+    se muestra igual, sin horario."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    entries = data.get("bibliotecas", [])
+
+    def schedule(entry: Dict[str, Any]) -> str:
+        try:
+            record = fetch(f"{BASE}/equipamiento/{entry['id']}.json")
+        except (OSError, ValueError):
+            return ""
+        return html_to_text(record.get("horario")) if isinstance(record, dict) else ""
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        schedules = list(pool.map(schedule, entries))
+
+    items = []
+    for entry, horario in zip(entries, schedules):
+        address = ", ".join(
+            p for p in (entry.get("address", ""), f"{entry.get('postal', '')} {entry.get('town', '')}".strip()) if p
+        )
+        items.append(
+            {
+                "id": f"bibliotecas-{entry['id']}",
+                "name": entry["name"],
+                "address": address,
+                "phone": entry.get("phone", ""),
+                "call": first_phone(entry.get("phone", "")),
+                "horario": horario,
+                "info": "",
+                "url": f"{BASE}/equipamiento/{entry['id']}",
+                "lat": None,
+                "lng": None,
+            }
+        )
+    return sorted(items, key=lambda i: i["name"].lower())
+
 
 _PHONE = re.compile(r"(?<![\d])([6789](?:[ .]?\d){8})(?![\d])")
 
@@ -129,16 +182,9 @@ def _fetch_json(url: str) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _raw_items(group: Dict[str, Any], fetch: Callable[[str], Any]) -> List[Dict[str, Any]]:
-    if group.get("source") == "farmacia":
-        data = fetch(f"{BASE}/farmacia.json?rows=100")
-        return list(data.get("result") or []) if isinstance(data, dict) else []
-    items: List[Dict[str, Any]] = []
-    for category in group["categories"]:
-        data = fetch(f"{BASE}/equipamiento/category/{category}.json?rows=500")
-        if isinstance(data, dict):
-            items += data.get("equipamiento") or data.get("result") or []
-    return items
+def _farmacias(fetch: Callable[[str], Any]) -> List[Dict[str, Any]]:
+    data = fetch(f"{BASE}/farmacia.json?rows=100")
+    return list(data.get("result") or []) if isinstance(data, dict) else []
 
 
 def collect_services(fetch: Callable[[str], Any] = _fetch_json) -> Dict[str, Any]:
@@ -152,8 +198,12 @@ def collect_services(fetch: Callable[[str], Any] = _fetch_json) -> Dict[str, Any
                 entry["items"] = sorted(health_centres(), key=lambda i: i["name"].lower())
                 groups.append(entry)
                 continue
+            if group.get("source") == "bibliotecas":
+                entry["items"] = libraries(fetch)
+                groups.append(entry)
+                continue
             seen = set()
-            for raw in _raw_items(group, fetch):
+            for raw in _farmacias(fetch):
                 item = normalize_service(group["id"], raw)
                 if item and item["id"] not in seen:
                     seen.add(item["id"])

@@ -18,8 +18,8 @@ void main() {
     for (final label in [
       'Agenda',
       'Para hoy',
-      'Patrimonio',
-      'Comer',
+      'Monumentos',
+      'Rutas',
       'Servicios',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
@@ -40,6 +40,6 @@ void main() {
 
     await tester.tap(find.byTooltip('Inicio'));
     await tester.pumpAndSettle();
-    expect(find.text('Comer'), findsOneWidget);
+    expect(find.text('Monumentos'), findsOneWidget);
   });
 }

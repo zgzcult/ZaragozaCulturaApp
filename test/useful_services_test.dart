@@ -24,23 +24,24 @@ const _json = {
       ],
     },
     {
-      'id': 'hospitales',
-      'title': 'Hospitales',
+      'id': 'bibliotecas',
+      'title': 'Bibliotecas municipales',
       'items': [
         {
-          'id': 'hospitales-1',
-          'name': 'Hospital Miguel Servet',
-          'address': 'Paseo Isabel la Católica, 1-3',
-          'phone': '976 765 500',
-          'call': '976765500',
-          'url': 'https://www.zaragoza.es/sede/servicio/equipamiento/1',
+          'id': 'bibliotecas-916',
+          'name': 'Biblioteca Benjamín Jarnés (Actur-Rey Fernando)',
+          'address': 'Calle Pedro Laín Entralgo 15, 50018 Zaragoza',
+          'phone': '976 726 108',
+          'call': '976726108',
+          'horario': '• Lunes: de 15 a 21 h.',
+          'url': 'https://www.zaragoza.es/sede/servicio/equipamiento/916',
         },
-        {'id': 'hospitales-2', 'name': 'Clínica Actur', 'phone': ''},
+        {'id': 'bibliotecas-2', 'name': 'Biblioteca Sin Datos', 'phone': ''},
       ],
     },
     {
-      'id': 'policia-nacional',
-      'title': 'Policía Nacional',
+      'id': 'centros-salud',
+      'title': 'Centros Salud Públicos',
       'items': [],
       'error': true,
     },
@@ -65,7 +66,7 @@ void main() {
   test('lee los grupos, sus lugares y los que fallaron', () {
     expect(
       [for (final g in groups) g.id],
-      ['farmacias-guardia', 'hospitales', 'policia-nacional'],
+      ['farmacias-guardia', 'bibliotecas', 'centros-salud'],
     );
     expect(groups[1].items, hasLength(2));
     expect(groups[2].failed, isTrue);
@@ -76,15 +77,15 @@ void main() {
     final link = serviceDirectionsLink(groups[1].items.first);
     expect(
       link.queryParameters['destination'],
-      'Hospital Miguel Servet, Paseo Isabel la Católica, 1-3, Zaragoza',
+      'Biblioteca Benjamín Jarnés (Actur-Rey Fernando), '
+      'Calle Pedro Laín Entralgo 15, 50018 Zaragoza, Zaragoza',
     );
-    expect(allPharmaciesLink.queryParameters['query'], 'farmacias cerca de mí');
   });
 
   test('busca sin tildes por nombre o calle', () {
     final items = groups[1].items;
-    expect(searchServices(items, 'isabel catolica'), hasLength(1));
-    expect(searchServices(items, 'clinica'), hasLength(1));
+    expect(searchServices(items, 'lain entralgo'), hasLength(1));
+    expect(searchServices(items, 'sin datos'), hasLength(1));
     expect(searchServices(items, ''), hasLength(2));
   });
 
@@ -101,7 +102,9 @@ void main() {
         expect(find.text(text), findsOneWidget, reason: text);
       }
       expect(find.text('1 abiertas hoy'), findsOneWidget);
-      expect(find.text('Todas las farmacias'), findsOneWidget);
+      // Ya no hay enlace a «todas las farmacias» ni a Google Maps.
+      expect(find.text('Todas las farmacias'), findsNothing);
+      expect(find.text('2 bibliotecas'), findsOneWidget);
       expect(find.text('No disponible ahora mismo'), findsOneWidget);
 
       await tester.tap(find.text('Farmacias de guardia'));
@@ -145,7 +148,7 @@ void main() {
       );
       await tester.tap(find.text('Servicios'));
       await tester.pumpAndSettle();
-      expect(find.text('Hospitales'), findsOneWidget);
+      expect(find.text('Bibliotecas municipales'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
     });
   });

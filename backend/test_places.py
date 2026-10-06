@@ -15,11 +15,11 @@ spec.loader.exec_module(places)
 def raw(**overrides):
     data = {
         "id": 14,
-        "title": "RESTAURANTE EL CACHIRULO",
+        "title": "TORRE DEL AGUA",
         "streetAddress": "Ctra. de Logroño Km. 1,500",
         "postalCode": "50011",
         "tel": {"tel": "976 460 146"},
-        "url": "http://www.elcachirulo.es/restaurante/",
+        "url": "http://www.zaragoza.es/ejemplo/",
         "geometry": {"type": "Point", "coordinates": [671271.45, 4615302.48]},
     }
     data.update(overrides)
@@ -48,12 +48,12 @@ class UtmTests(unittest.TestCase):
 
 class NameTests(unittest.TestCase):
     def test_limpia_mayusculas_y_prefijo(self):
-        self.assertEqual(places.clean_name("RESTAURANTE EL CACHIRULO"), "El Cachirulo")
-        self.assertEqual(places.clean_name("BAR LA MAÑANA DE LOS AMIGOS"), "Bar la Mañana de los Amigos")
+        self.assertEqual(places.clean_name("TORRE DEL AGUA"), "Torre del Agua")
+        self.assertEqual(places.clean_name("PUENTE DE LA ALMOZARA Y LOS AMIGOS"), "Puente de la Almozara y los Amigos")
 
     def test_respeta_nombres_ya_bien_escritos(self):
-        self.assertEqual(places.clean_name("Casa Lac"), "Casa Lac")
-        self.assertEqual(places.clean_name("La Ternasca"), "La Ternasca")
+        self.assertEqual(places.clean_name("La Aljafería"), "La Aljafería")
+        self.assertEqual(places.clean_name("Torreón de la Zuda"), "Torreón de la Zuda")
 
     def test_nombre_vacio(self):
         self.assertEqual(places.clean_name("  "), "")
@@ -61,9 +61,9 @@ class NameTests(unittest.TestCase):
 
 class NormalizeTests(unittest.TestCase):
     def test_lugar_completo(self):
-        place = places.normalize_place("restaurante", raw())
-        self.assertEqual(place["id"], "restaurante-14")
-        self.assertEqual(place["name"], "El Cachirulo")
+        place = places.normalize_place("monumento", raw())
+        self.assertEqual(place["id"], "monumento-14")
+        self.assertEqual(place["name"], "Torre del Agua")
         self.assertEqual(place["address"], "Ctra. de Logroño Km. 1,500, 50011")
         self.assertEqual(place["phone"], "976 460 146")
         self.assertAlmostEqual(place["lat"], 41.669216, places=4)
@@ -72,30 +72,30 @@ class NormalizeTests(unittest.TestCase):
 
     def test_sin_coordenadas_se_guarda_para_la_lista(self):
         for geometry in (None, {"coordinates": []}):
-            place = places.normalize_place("restaurante", raw(geometry=geometry))
+            place = places.normalize_place("monumento", raw(geometry=geometry))
             self.assertIsNotNone(place)
             self.assertIsNone(place["lat"])
             self.assertIsNone(place["lng"])
             self.assertEqual(place["address"], "Ctra. de Logroño Km. 1,500, 50011")
 
     def test_sin_coordenadas_ni_direccion_se_descarta(self):
-        self.assertIsNone(places.normalize_place("restaurante", raw(geometry=None, streetAddress="", postalCode="")))
+        self.assertIsNone(places.normalize_place("monumento", raw(geometry=None, streetAddress="", postalCode="")))
 
     def test_coordenadas_fuera_de_zaragoza_se_ignoran_pero_se_conserva_el_lugar(self):
         for coords in ([0.0, 0.0], [100.0, 10.0]):
-            place = places.normalize_place("restaurante", raw(geometry={"coordinates": coords}))
+            place = places.normalize_place("monumento", raw(geometry={"coordinates": coords}))
             self.assertIsNotNone(place)
             self.assertIsNone(place["lat"])
 
     def test_coordenadas_en_grados(self):
-        place = places.normalize_place("restaurante", raw(geometry={"coordinates": [-0.8773, 41.6563]}))
+        place = places.normalize_place("monumento", raw(geometry={"coordinates": [-0.8773, 41.6563]}))
         self.assertEqual((place["lat"], place["lng"]), (41.6563, -0.8773))
 
     def test_web_invalida_se_ignora(self):
-        self.assertEqual(places.normalize_place("restaurante", raw(url="elcachirulo.es"))["url"], "")
+        self.assertEqual(places.normalize_place("monumento", raw(url="zaragoza.es/ejemplo"))["url"], "")
 
     def test_sin_nombre_se_descarta(self):
-        self.assertIsNone(places.normalize_place("restaurante", raw(title="   ")))
+        self.assertIsNone(places.normalize_place("monumento", raw(title="   ")))
 
 
 class CollectTests(unittest.TestCase):
@@ -114,16 +114,16 @@ class CollectTests(unittest.TestCase):
         places.time.sleep = lambda _: None
         try:
             # El total es mayor que una página: debe pedir la segunda y parar.
-            collected = places.collect("restaurante", fetch)
+            collected = places.collect("monumento", fetch)
         finally:
             places.time.sleep = original_pause
-        self.assertEqual(sorted(p["id"] for p in collected), ["restaurante-1", "restaurante-2", "restaurante-3"])
+        self.assertEqual(sorted(p["id"] for p in collected), ["monumento-1", "monumento-2", "monumento-3"])
         self.assertEqual(calls[:2], [0, places.PAGE_SIZE])
 
 
 class FakeCollection:
     def __init__(self, ids):
-        self.docs = {i: {"id": i, "type": "restaurante"} for i in ids}
+        self.docs = {i: {"id": i, "type": "monumento"} for i in ids}
 
     def update_one(self, query, update, upsert=False):
         self.docs[query["id"]] = update["$set"]
@@ -137,24 +137,24 @@ class FakeCollection:
 
 
 def fresh(ids):
-    return [{"id": i, "type": "restaurante"} for i in ids]
+    return [{"id": i, "type": "monumento"} for i in ids]
 
 
 class SaveTests(unittest.TestCase):
     def test_borra_los_obsoletos(self):
         col = FakeCollection([f"r{i}" for i in range(300)] + ["viejo"])
-        places.save("restaurante", fresh([f"r{i}" for i in range(300)]), col)
+        places.save("monumento", fresh([f"r{i}" for i in range(300)]), col)
         self.assertNotIn("viejo", col.docs)
         self.assertEqual(len(col.docs), 300)
 
     def test_no_limpia_si_hay_pocos(self):
         col = FakeCollection(["a", "b", "c", "viejo"])
-        places.save("restaurante", fresh(["a", "b", "c"]), col)
+        places.save("monumento", fresh(["a", "b", "c"]), col)
         self.assertIn("viejo", col.docs)
 
     def test_cancela_si_borraria_demasiado(self):
         col = FakeCollection([f"r{i}" for i in range(1000)])
-        places.save("restaurante", fresh([f"r{i}" for i in range(250)]), col)
+        places.save("monumento", fresh([f"r{i}" for i in range(250)]), col)
         self.assertEqual(len(col.docs), 1000)
 
 
@@ -216,7 +216,7 @@ class GeocodeTests(unittest.TestCase):
 
 
 def sin_ubicacion(street, postal="50001", pid="1"):
-    return {"id": f"restaurante-{pid}", "street": street, "postal": postal, "lat": None, "lng": None, "locSource": ""}
+    return {"id": f"monumento-{pid}", "street": street, "postal": postal, "lat": None, "lng": None, "locSource": ""}
 
 
 class FindTests(unittest.TestCase):
@@ -389,18 +389,58 @@ class MonumentTests(unittest.TestCase):
         self.assertFalse(m["top"])
         self.assertEqual(m["image"], "")
 
-    def test_los_restaurantes_no_llevan_campos_de_monumento(self):
-        self.assertNotIn("description", places.normalize_place("restaurante", raw()))
-
     def test_limpieza_por_tipo_con_su_minimo(self):
         col = FakeCollection([f"r{i}" for i in range(300)])
+        for doc in col.docs.values():
+            doc["type"] = "otro"
         col.docs.update({f"m{i}": {"id": f"m{i}", "type": "monumento"} for i in range(150)})
         col.docs["m-viejo"] = {"id": "m-viejo", "type": "monumento"}
         monuments = [{"id": f"m{i}", "type": "monumento"} for i in range(150)]
         places.save("monumento", monuments, col)
         self.assertNotIn("m-viejo", col.docs)
-        # Los restaurantes no se tocan.
-        self.assertEqual(sum(1 for d in col.docs.values() if d.get("type") == "restaurante"), 300)
+        # Los de otro tipo no se tocan.
+        self.assertEqual(sum(1 for d in col.docs.values() if d.get("type") == "otro"), 300)
+
+
+class LegacyCleanupTests(unittest.TestCase):
+    class Collection:
+        def __init__(self, docs):
+            self.docs = docs
+
+        def count_documents(self, query):
+            kinds = query["type"]["$in"]
+            return sum(1 for d in self.docs if d.get("type") in kinds)
+
+        def find(self, query, proj=None):
+            return [dict(d) for d in self.docs]
+
+        def delete_many(self, query):
+            if "type" in query:
+                kinds = query["type"]["$in"]
+                self.docs[:] = [d for d in self.docs if d.get("type") not in kinds]
+            else:
+                ids = query["_id"]["$in"]
+                self.docs[:] = [d for d in self.docs if d["_id"] not in ids]
+
+    def test_los_restaurantes_se_borran_y_los_monumentos_no(self):
+        col = self.Collection(
+            [{"type": "restaurante"}] * 3 + [{"type": "monumento"}] * 2,
+        )
+        self.assertEqual(places.purge_legacy(col), 3)
+        self.assertEqual([d["type"] for d in col.docs], ["monumento", "monumento"])
+        self.assertEqual(places.purge_legacy(col), 0)
+        self.assertNotIn("restaurante", places.KINDS)
+
+    def test_la_cache_de_ubicaciones_pierde_lo_que_nadie_usa(self):
+        col = self.Collection([{"_id": "v2|calle a 1|50001"}, {"_id": "v2|calle b 2|50002"}])
+        self.assertEqual(places.prune_geocode_cache(col, {"v2|calle a 1|50001"}), 1)
+        self.assertEqual([d["_id"] for d in col.docs], ["v2|calle a 1|50001"])
+
+    def test_fecha_oficial_de_actualizacion_del_monumento(self):
+        m = places.normalize_place("monumento", raw_monument(lastUpdated="2018-06-05T13:53:20"))
+        self.assertEqual(m["updated"], "2018-06-05")
+        sin = places.normalize_place("monumento", raw_monument())
+        self.assertEqual(sin["updated"], "")
 
 
 if __name__ == "__main__":

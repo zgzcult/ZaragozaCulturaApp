@@ -237,19 +237,4 @@ void main() {
     );
     expect(await loadRemindersEnabled(), isFalse);
   });
-
-  testWidgets(
-    'La agenda ya no muestra el aviso de origen al final de la lista',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      await tester.binding.setSurfaceSize(const Size(400, 2000));
-      await tester.pumpWidget(const ZaragozaCulturaApp(repository: _Repo()));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Agenda'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Origen de los datos'), findsNothing);
-      expect(find.textContaining('Aplicación no oficial'), findsNothing);
-      await tester.binding.setSurfaceSize(null);
-    },
-  );
 }
