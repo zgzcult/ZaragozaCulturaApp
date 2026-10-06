@@ -338,8 +338,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
           const Padding(
             padding: EdgeInsets.only(bottom: 16),
             child: Text(
-              'Recorridos a pie por la historia de la ciudad, basados en las '
-              'rutas oficiales de Turismo de Zaragoza.',
+              'Descubre la gran historia de la ciudad de Zaragoza con estas '
+              'magníficas rutas que podrás disfrutar a pie.',
               style: TextStyle(color: Brand.slate, height: 1.45),
             ),
           ),

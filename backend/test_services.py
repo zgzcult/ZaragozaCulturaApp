@@ -17,7 +17,11 @@ FARMACIA = {
     "horario": "Lunes a Domingo 24 horas",
     "calle": "Pº. de Sagasta, 8",
     "geometry": {"type": "Point", "coordinates": [-0.8858667, 41.6461463]},
-    "guardia": {"horario": "Abiertas de 9:15 h. a 9:15 h. del día siguiente", "sector": "Sector Gran Vía"},
+    "guardia": {
+        "fecha": "2026-10-06T00:00:00",
+        "horario": "Abiertas de 9:15 h. a 9:15 h. del día siguiente",
+        "sector": "Sector Gran Vía",
+    },
 }
 
 POLICIA = {
@@ -128,6 +132,47 @@ class CollectTests(unittest.TestCase):
         self.assertTrue(items["Picarral"]["url"].endswith("sector-sanitario-zaragoza-i"))
         for item in items.values():
             self.assertNotIn("opendata", item["url"])
+
+
+def _farmacia(i, fecha="2026-10-06T00:00:00"):
+    f = dict(FARMACIA, id=i, title=f"Farmacia {i}")
+    f["guardia"] = dict(FARMACIA["guardia"], fecha=fecha)
+    return f
+
+
+class GuardiaTests(unittest.TestCase):
+    def test_solo_las_de_guardia_del_dia_mas_reciente(self):
+        sin_guardia = {"id": 1, "title": "Farmacia normal", "calle": "Calle 1"}
+        ayer = _farmacia(2, "2026-10-05T00:00:00")
+        hoy = [_farmacia(10), _farmacia(11)]
+        got = services.guard_pharmacies([sin_guardia, ayer] + hoy)
+        self.assertEqual([g["id"] for g in got], [10, 11])
+
+    def test_un_listado_enorme_no_se_enseña(self):
+        # El caso real: salían 72 farmacias «de guardia».
+        muchas = [_farmacia(i) for i in range(72)]
+        with self.assertRaises(ValueError):
+            services.guard_pharmacies(muchas)
+
+    def test_el_grupo_falla_en_vez_de_mostrar_una_cifra_absurda(self):
+        data = services.collect_services(lambda url: {"result": [_farmacia(i) for i in range(72)]})
+        grupo = {g["id"]: g for g in data["groups"]}["farmacias-guardia"]
+        self.assertTrue(grupo["error"])
+        self.assertEqual(grupo["items"], [])
+
+    def test_pide_solo_las_de_guardia(self):
+        urls = []
+
+        def fetch(url):
+            urls.append(url)
+            return {"result": [_farmacia(1)]}
+
+        services.collect_services(fetch)
+        self.assertIn("tipo=guardia", urls[0])
+
+    def test_sin_farmacias_de_guardia_devuelve_vacio(self):
+        self.assertEqual(services.guard_pharmacies([]), [])
+        self.assertEqual(services.guard_pharmacies([{"id": 1, "title": "x"}]), [])
 
 
 class LibraryTests(unittest.TestCase):

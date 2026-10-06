@@ -2118,17 +2118,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (event.imageCredit.isNotEmpty &&
-                      (event.imageUrl.isEmpty || event.genericImage)) ...[
-                    Text(
-                      '${event.imageCredit} (imagen orientativa)',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF738196),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
                   _CategoryPill(category: event.category),
                   const SizedBox(height: 12),
                   Text(

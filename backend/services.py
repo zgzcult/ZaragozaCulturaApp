@@ -182,9 +182,33 @@ def _fetch_json(url: str) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
+# Hoy hay unas 7 farmacias de guardia (24 horas). Más de MAX_GUARDIAS no es un
+# dato creíble (p. ej. si el Ayuntamiento devolviera otro listado): se descarta
+# antes que enseñar una cifra errónea.
+MAX_GUARDIAS = 25
+
+
+def guard_pharmacies(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Solo las farmacias con guardia y de un único día (el más reciente).
+    Lanza ValueError si salen demasiadas."""
+    on_duty = [i for i in items if isinstance(i.get("guardia"), dict) and i["guardia"].get("fecha")]
+    if not on_duty:
+        return []
+    latest = max(str(i["guardia"]["fecha"])[:10] for i in on_duty)
+    today = [i for i in on_duty if str(i["guardia"]["fecha"])[:10] == latest]
+    if len(today) > MAX_GUARDIAS:
+        raise ValueError(
+            f"{len(today)} farmacias de guardia (de {len(items)} recibidas): dato no creíble, se descarta"
+        )
+    return today
+
+
 def _farmacias(fetch: Callable[[str], Any]) -> List[Dict[str, Any]]:
-    data = fetch(f"{BASE}/farmacia.json?rows=100")
-    return list(data.get("result") or []) if isinstance(data, dict) else []
+    # tipo=guardia: solo las de guardia de hoy (como la pestaña «De guardia»
+    # de zaragoza.es/sede/servicio/farmacia).
+    data = fetch(f"{BASE}/farmacia.json?rows=100&tipo=guardia")
+    items = list(data.get("result") or []) if isinstance(data, dict) else []
+    return guard_pharmacies(items)
 
 
 def collect_services(fetch: Callable[[str], Any] = _fetch_json) -> Dict[str, Any]:

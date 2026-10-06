@@ -1,5 +1,5 @@
-/// «Servicios útiles»: farmacias de guardia, hospitales, centros de salud,
-/// policía y aseos públicos, con los datos oficiales del Ayuntamiento.
+/// «Servicios útiles»: farmacias de guardia, centros de salud públicos y
+/// bibliotecas municipales. Las fuentes de los datos se citan en «Acerca de».
 /// Sin mapas: cada lugar se abre en Google Maps por su dirección.
 library;
 
@@ -322,13 +322,6 @@ class _UsefulServicesScreenState extends State<UsefulServicesScreen> {
               ),
             ],
           ],
-          const SizedBox(height: 14),
-          const Text(
-            'Farmacias de guardia y bibliotecas: Ayuntamiento de Zaragoza. '
-            'Centros de salud: Servicio Aragonés de Salud y Aragón Open Data. '
-            'Antes de ir, confirma el horario por teléfono.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
-          ),
         ],
       ),
     );
@@ -519,7 +512,7 @@ class _ServiceGroupScreenState extends State<ServiceGroupScreen> {
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text(
-                'Farmacias de guardia de hoy, según el Ayuntamiento de Zaragoza.',
+                'Farmacias de guardia de hoy.',
                 style: TextStyle(color: Brand.slate, height: 1.4),
               ),
             )
@@ -556,7 +549,11 @@ class _ServiceGroupScreenState extends State<ServiceGroupScreen> {
               ),
             ),
           for (final item in shown)
-            ServiceCard(item: item, color: _groupColor(group.id)),
+            ServiceCard(
+              item: item,
+              color: _groupColor(group.id),
+              horarioLabel: isPharmacy ? 'Horario habitual' : null,
+            ),
         ],
       ),
     );
@@ -567,7 +564,17 @@ class ServiceCard extends StatelessWidget {
   final ServiceItem item;
   final Color color;
 
-  const ServiceCard({super.key, required this.item, this.color = Brand.navy});
+  /// Rótulo del horario cuando hace falta distinguirlo de otro (en las
+  /// farmacias de guardia, el horario de guardia va aparte en el recuadro de
+  /// color y este es el habitual).
+  final String? horarioLabel;
+
+  const ServiceCard({
+    super.key,
+    required this.item,
+    this.color = Brand.navy,
+    this.horarioLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -622,7 +629,12 @@ class ServiceCard extends StatelessWidget {
                 if (item.phone.isNotEmpty)
                   _Row(icon: Icons.phone_outlined, text: item.phone),
                 if (item.horario.isNotEmpty)
-                  _Row(icon: Icons.schedule_outlined, text: item.horario),
+                  _Row(
+                    icon: Icons.schedule_outlined,
+                    text: horarioLabel == null
+                        ? item.horario
+                        : '$horarioLabel:\n${item.horario}',
+                  ),
               ],
             ),
           ),
@@ -710,12 +722,18 @@ class _CardAction extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: Brand.navy),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Brand.navy,
+              // Flexible: con tres botones en un móvil estrecho el texto se
+              // recorta antes que desbordar.
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Brand.navy,
+                  ),
                 ),
               ),
             ],

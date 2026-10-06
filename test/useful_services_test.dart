@@ -19,6 +19,7 @@ const _json = {
           'phone': '976226203',
           'call': '976226203',
           'info': 'De guardia: Abiertas de 9:15 h. a 9:15 h. del día siguiente',
+          'horario': 'Lunes a viernes de 9 a 21 h.',
           'url': '',
         },
       ],
@@ -109,11 +110,28 @@ void main() {
 
       await tester.tap(find.text('Farmacias de guardia'));
       await tester.pumpAndSettle();
+      // Dos horarios distintos y bien rotulados: el de guardia y el habitual.
       expect(find.textContaining('De guardia: Abiertas'), findsOneWidget);
+      expect(
+        find.text('Horario habitual:\nLunes a viernes de 9 a 21 h.'),
+        findsOneWidget,
+      );
       expect(find.text('Llamar'), findsOneWidget);
       expect(find.text('Cómo llegar'), findsOneWidget);
       // Sin mapa: solo lista.
       expect(find.byType(Image), findsNothing);
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    testWidgets('en bibliotecas el horario no lleva el rótulo «habitual»', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(400, 1400));
+      await tester.pumpWidget(
+        MaterialApp(home: ServiceGroupScreen(group: groups[1])),
+      );
+      expect(find.text('• Lunes: de 15 a 21 h.'), findsOneWidget);
+      expect(find.textContaining('Horario habitual'), findsNothing);
       await tester.binding.setSurfaceSize(null);
     });
 
