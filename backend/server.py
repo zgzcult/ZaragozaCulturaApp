@@ -191,15 +191,26 @@ class EventHandler(BaseHTTPRequestHandler):
         # Se lee siempre el mensaje (si no es enorme): cerrar la conexión con
         # datos sin leer puede hacer que el cliente reciba un reset en vez de
         # la respuesta.
-        raw = self.rfile.read(length) if 0 < length <= submissions.MAX_BODY_BYTES else b""
+        path = urlparse(self.path).path
+        # «Envía tu evento» puede traer una foto; el resto, solo texto.
+        max_body = submissions.MAX_BODY_WITH_PHOTO if path == "/submit" else submissions.MAX_BODY_BYTES
+        raw = self.rfile.read(length) if 0 < length <= max_body else b""
+        if length > max_body:
+            # Demasiado grande: se lee y se descarta (hasta un tope) para que
+            # el cliente reciba el error en vez de un corte de conexión.
+            pending = min(length, 8_000_000)
+            while pending > 0:
+                chunk = self.rfile.read(min(65536, pending))
+                if not chunk:
+                    break
+                pending -= len(chunk)
 
         # Render pasa la IP real en X-Forwarded-For.
         forwarded = self.headers.get("X-Forwarded-For", "")
         ip = forwarded.split(",")[0].strip() or self.client_address[0]
-        path = urlparse(self.path).path
         if path not in ("/submit", "/crash"):
             status, body = 404, {"error": "Not found"}
-        elif length > submissions.MAX_BODY_BYTES:
+        elif length > max_body:
             status, body = 413, {"ok": False, "error": "El mensaje es demasiado largo."}
         elif path == "/crash":
             status, body = crashes.process_report(raw, ip, limiter=_crash_limiter)

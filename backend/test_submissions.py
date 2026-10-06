@@ -115,6 +115,7 @@ class ProcessTests(unittest.TestCase):
     def setUp(self):
         self.stored = []
         self.sent = []
+        self.attachments = []
         self.limiter = submissions.RateLimiter()
 
     def run_process(self, raw, *, store_ok=True, send_ok=True, ip="9.9.9.9"):
@@ -122,8 +123,9 @@ class ProcessTests(unittest.TestCase):
             self.stored.append(doc)
             return store_ok
 
-        def send(subject, text, reply_to):
+        def send(subject, text, reply_to, attachments=None):
             self.sent.append((subject, text, reply_to))
+            self.attachments.append(attachments)
             return send_ok
 
         return submissions.process_submission(raw, ip, limiter=self.limiter, store=store, send=send)
@@ -157,6 +159,105 @@ class ProcessTests(unittest.TestCase):
         for _ in range(submissions.RATE_LIMIT):
             self.assertEqual(self.run_process(body())[0], 200)
         self.assertEqual(self.run_process(body())[0], 429)
+
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 2000
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 2000
+
+
+def event_body(photo_bytes=None, **overrides):
+    import base64
+
+    data = {
+        "type": "evento",
+        "title": "Concierto solidario",
+        "description": "Fecha: 12 de noviembre de 2026\nLugar: Sala Oasis\n\nMúsica en directo.",
+        "contact": "hola@example.org",
+    }
+    if photo_bytes is not None:
+        data["photo"] = {"name": "cartel.jpg", "data": base64.b64encode(photo_bytes).decode("ascii")}
+    data.update(overrides)
+    return json.dumps(data).encode("utf-8")
+
+
+class PhotoTests(ProcessTests):
+    """Foto opcional de «Envía tu evento»."""
+
+    def test_la_foto_llega_adjunta_al_correo_y_no_se_guarda(self):
+        import base64
+
+        status, _ = self.run_process(event_body(JPEG))
+        self.assertEqual(status, 200)
+        self.assertEqual(self.sent[0][0], "Evento")
+        self.assertIn("Foto: adjunta", self.sent[0][1])
+        attachment = self.attachments[0][0]
+        self.assertEqual(attachment["filename"], "evento.jpg")
+        self.assertEqual(base64.b64decode(attachment["content"]), JPEG)
+        # En la base de datos solo queda constancia de que había foto.
+        self.assertTrue(self.stored[0]["hasPhoto"])
+        self.assertNotIn("photo", self.stored[0])
+
+    def test_png_tambien_vale_y_el_nombre_lo_pone_el_servidor(self):
+        self.run_process(event_body(PNG))
+        self.assertEqual(self.attachments[0][0]["filename"], "evento.png")
+
+    def test_sin_foto_el_correo_va_sin_adjuntos(self):
+        self.assertEqual(self.run_process(event_body())[0], 200)
+        self.assertIsNone(self.attachments[0])
+        self.assertFalse(self.stored[0]["hasPhoto"])
+        self.assertNotIn("Foto:", self.sent[0][1])
+
+    def test_un_pdf_u_otro_archivo_se_rechaza(self):
+        for fake in (b"%PDF-1.7 " + b"x" * 500, b"MZ" + b"x" * 500, b"<html>"):
+            status, response = self.run_process(event_body(fake))
+            self.assertEqual(status, 422)
+            self.assertIn("JPG o PNG", response["error"])
+        self.assertEqual(self.sent, [])
+
+    def test_base64_roto(self):
+        raw = event_body(photo={"name": "x.jpg", "data": "esto no es base64 !!"})
+        self.assertEqual(self.run_process(raw)[0], 422)
+
+    def test_foto_demasiado_grande(self):
+        big = b"\xff\xd8\xff" + b"\x00" * submissions.MAX_PHOTO_BYTES
+        status, response = self.run_process(event_body(big))
+        self.assertIn(status, (413, 422))
+        self.assertEqual(self.sent, [])
+
+    def test_las_sugerencias_no_admiten_foto(self):
+        self.assertEqual(self.run_process(event_body(JPEG, type="mejora"))[0], 422)
+
+    def test_el_texto_mantiene_su_limite_aunque_haya_foto(self):
+        raw = event_body(JPEG, relleno="x" * (submissions.MAX_BODY_BYTES + 10))
+        self.assertEqual(self.run_process(raw)[0], 413)
+
+    def test_resend_recibe_los_adjuntos(self):
+        captured = {}
+
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def fake_urlopen(request, timeout=0, context=None):
+            captured.update(json.loads(request.data.decode("utf-8")))
+            return Response()
+
+        original, env = submissions.urllib.request.urlopen, dict(os.environ)
+        os.environ.update({"RESEND_API_KEY": "clave-de-prueba", "NOTIFY_EMAIL": "destino@example.org"})
+        submissions.urllib.request.urlopen = fake_urlopen
+        try:
+            ok = submissions.send_email_resend("Evento", "texto", None, [{"filename": "evento.jpg", "content": "QUJD"}])
+        finally:
+            submissions.urllib.request.urlopen = original
+            os.environ.clear()
+            os.environ.update(env)
+        self.assertTrue(ok)
+        self.assertEqual(captured["attachments"], [{"filename": "evento.jpg", "content": "QUJD"}])
 
 
 class ServerTests(unittest.TestCase):
@@ -207,6 +308,20 @@ class ServerTests(unittest.TestCase):
 
     def test_envio_invalido(self):
         self.assertEqual(self.post("/submit", body(title="a"))[0], 422)
+
+    def test_el_servidor_real_lee_un_evento_con_foto_de_medio_mega(self):
+        photo = b"\xff\xd8\xff\xe0" + os.urandom(500_000)
+        raw = event_body(photo)
+        self.assertGreater(len(raw), 600_000)
+        # Sin correo ni base de datos configurados responde 503: lo importante
+        # es que ha leído y validado el envío entero (no 413 ni 400).
+        self.assertEqual(self.post("/submit", raw)[0], 503)
+        # Y un archivo que no es imagen se rechaza aunque quepa.
+        self.assertEqual(self.post("/submit", event_body(b"%PDF-1.7" + os.urandom(1000)))[0], 422)
+
+    def test_el_servidor_real_rechaza_un_envio_enorme(self):
+        raw = event_body(b"\xff\xd8\xff" + os.urandom(submissions.MAX_PHOTO_BYTES + 200_000))
+        self.assertIn(self.post("/submit", raw)[0], (413, 422))
 
 
 if __name__ == "__main__":

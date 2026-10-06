@@ -14,6 +14,8 @@ Variables de entorno (se definen en Render, nunca en el repositorio):
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -31,7 +33,17 @@ SUBJECTS = {"mejora": "Mejora", "evento": "Evento"}
 MAX_TITLE = 120
 MAX_DESCRIPTION = 2000
 MAX_CONTACT = 200
-MAX_BODY_BYTES = 16_000
+MAX_BODY_BYTES = 16_000  # texto del envío (sin la foto)
+
+# Foto opcional de «Envía tu evento»: la app la reduce antes de enviarla.
+MAX_PHOTO_BYTES = 1_500_000
+# El envío completo: el texto más la foto en base64 (ocupa un tercio más).
+MAX_BODY_WITH_PHOTO = MAX_BODY_BYTES + MAX_PHOTO_BYTES * 4 // 3 + 1_000
+
+_PHOTO_TYPES = (
+    (b"\xff\xd8\xff", "jpg"),
+    (b"\x89PNG\r\n\x1a\n", "png"),
+)
 
 RATE_LIMIT = 5  # envíos por IP...
 RATE_WINDOW = 3600  # ...cada hora
@@ -84,12 +96,38 @@ def validate(payload: Any) -> Tuple[Optional[Dict[str, str]], Optional[str]]:
     return {"type": kind, "title": title, "description": description, "contact": contact}, None
 
 
-def build_email(clean: Dict[str, str]) -> Tuple[str, str]:
+def decode_photo(payload: Any) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Foto adjunta al envío: (None, None) si no hay; ({"bytes", "ext"}, None)
+    si es válida; (None, error) si no lo es. Solo se admiten JPG y PNG, y se
+    comprueba el contenido real del archivo, no su nombre."""
+    photo = payload.get("photo") if isinstance(payload, dict) else None
+    if photo in (None, "", {}):
+        return None, None
+    data = photo.get("data") if isinstance(photo, dict) else None
+    if not isinstance(data, str) or not data:
+        return None, "La foto no es válida."
+    if len(data) > MAX_PHOTO_BYTES * 4 // 3 + 4:
+        return None, "La foto es demasiado grande."
+    try:
+        raw = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None, "La foto no es válida."
+    if len(raw) > MAX_PHOTO_BYTES:
+        return None, "La foto es demasiado grande."
+    for magic, ext in _PHOTO_TYPES:
+        if raw.startswith(magic):
+            return {"bytes": raw, "ext": ext}, None
+    return None, "La foto debe ser una imagen JPG o PNG."
+
+
+def build_email(clean: Dict[str, str], has_photo: bool = False) -> Tuple[str, str]:
     """Asunto y texto del correo."""
     subject = SUBJECTS[clean["type"]]
     lines = [f"Título: {clean['title']}", "", clean["description"]]
     if clean["contact"]:
         lines += ["", f"Contacto: {clean['contact']}"]
+    if has_photo:
+        lines += ["", "Foto: adjunta a este correo."]
     return subject, "\n".join(lines)
 
 
@@ -102,7 +140,12 @@ def _ssl_context() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
-def send_email_resend(subject: str, text: str, reply_to: Optional[str] = None) -> bool:
+def send_email_resend(
+    subject: str,
+    text: str,
+    reply_to: Optional[str] = None,
+    attachments: Optional[List[Dict[str, str]]] = None,
+) -> bool:
     """Envía el aviso por Resend. Devuelve False si no está configurado o falla."""
     api_key = os.environ.get("RESEND_API_KEY", "").strip()
     to = os.environ.get("NOTIFY_EMAIL", "").strip()
@@ -118,6 +161,9 @@ def send_email_resend(subject: str, text: str, reply_to: Optional[str] = None) -
     }
     if reply_to:
         body["reply_to"] = reply_to
+    if attachments:
+        # [{"filename": "evento.jpg", "content": "<base64>"}]
+        body["attachments"] = attachments
     request = urllib.request.Request(
         "https://api.resend.com/emails",
         data=json.dumps(body).encode("utf-8"),
@@ -168,12 +214,16 @@ def process_submission(
     *,
     limiter: RateLimiter,
     store: Optional[Callable[[Dict[str, Any]], bool]] = None,
-    send: Optional[Callable[[str, str, Optional[str]], bool]] = None,
+    send: Optional[Callable[..., bool]] = None,
 ) -> Tuple[int, Dict[str, Any]]:
     """Procesa un envío. Devuelve (código HTTP, respuesta JSON)."""
     store = store or store_in_mongo
     send = send or send_email_resend
-    if len(raw_body) > MAX_BODY_BYTES:
+    # Solo un envío con foto puede pasar del límite del texto.
+    too_long = len(raw_body) > MAX_BODY_WITH_PHOTO or (
+        len(raw_body) > MAX_BODY_BYTES and b'"photo"' not in raw_body
+    )
+    if too_long:
         return 413, {"ok": False, "error": "El mensaje es demasiado largo."}
     if not limiter.allow(client_ip):
         return 429, {"ok": False, "error": "Has enviado demasiados mensajes. Inténtalo más tarde."}
@@ -186,13 +236,32 @@ def process_submission(
     if clean is None:
         return 422, {"ok": False, "error": error}
 
+    photo, error = decode_photo(payload)
+    if error:
+        return 422, {"ok": False, "error": error}
+    if photo and clean["type"] != "evento":
+        return 422, {"ok": False, "error": "Este envío no admite fotos."}
+    # Sin contar la foto, el texto sigue teniendo su límite de siempre.
+    photo_chars = len(payload["photo"]["data"]) if photo else 0
+    if len(raw_body) - photo_chars > MAX_BODY_BYTES:
+        return 413, {"ok": False, "error": "El mensaje es demasiado largo."}
+
+    # La foto no se guarda en la base de datos: solo viaja en el correo.
     doc = dict(clean)
     doc["createdAt"] = datetime.now(timezone.utc).isoformat()
+    doc["hasPhoto"] = photo is not None
     stored = store(doc)
 
-    subject, text = build_email(clean)
+    subject, text = build_email(clean, has_photo=photo is not None)
     reply_to = clean["contact"] if _EMAIL_RE.match(clean["contact"]) else None
-    emailed = send(subject, text, reply_to)
+    if photo:
+        attachment = {
+            "filename": f"evento.{photo['ext']}",
+            "content": base64.b64encode(photo["bytes"]).decode("ascii"),
+        }
+        emailed = send(subject, text, reply_to, [attachment])
+    else:
+        emailed = send(subject, text, reply_to)
     print(f"[INFO] Envío '{clean['type']}' recibido (guardado={stored}, correo={emailed}).")
 
     if not stored and not emailed:

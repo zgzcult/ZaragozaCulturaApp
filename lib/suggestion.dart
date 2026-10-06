@@ -3,6 +3,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -24,6 +25,21 @@ abstract class SubmissionClient {
     required String description,
     String contact = '',
   });
+
+  /// Como [send], con una foto adjunta (JPG o PNG) si se indica. Por defecto
+  /// se envía sin ella.
+  Future<SubmitResult> sendWithPhoto({
+    required String type,
+    required String title,
+    required String description,
+    String contact = '',
+    Uint8List? photo,
+  }) => send(
+    type: type,
+    title: title,
+    description: description,
+    contact: contact,
+  );
 }
 
 class HttpSubmissionClient extends SubmissionClient {
@@ -35,6 +51,20 @@ class HttpSubmissionClient extends SubmissionClient {
     required String title,
     required String description,
     String contact = '',
+  }) => sendWithPhoto(
+    type: type,
+    title: title,
+    description: description,
+    contact: contact,
+  );
+
+  @override
+  Future<SubmitResult> sendWithPhoto({
+    required String type,
+    required String title,
+    required String description,
+    String contact = '',
+    Uint8List? photo,
   }) async {
     try {
       // El servidor gratuito puede tardar en despertar: margen de 60 s.
@@ -47,9 +77,11 @@ class HttpSubmissionClient extends SubmissionClient {
               'title': title,
               'description': description,
               'contact': contact,
+              if (photo != null) 'photo': {'data': base64Encode(photo)},
             }),
           )
-          .timeout(const Duration(seconds: 60));
+          // Con foto la subida puede tardar más en redes lentas.
+          .timeout(Duration(seconds: photo == null ? 60 : 120));
       if (response.statusCode == 200) return SubmitResult.ok;
       if (response.statusCode == 429) return SubmitResult.rateLimited;
       if ({400, 413, 422}.contains(response.statusCode)) {

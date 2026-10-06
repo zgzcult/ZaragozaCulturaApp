@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +33,31 @@ class _FakeClient extends SubmissionClient {
       'contact': contact,
     });
     return result;
+  }
+}
+
+/// Cliente que anota la foto de cada envío.
+class _PhotoClient extends SubmissionClient {
+  final List<Uint8List?> photos = [];
+
+  @override
+  Future<SubmitResult> send({
+    required String type,
+    required String title,
+    required String description,
+    String contact = '',
+  }) async => SubmitResult.ok;
+
+  @override
+  Future<SubmitResult> sendWithPhoto({
+    required String type,
+    required String title,
+    required String description,
+    String contact = '',
+    Uint8List? photo,
+  }) async {
+    photos.add(photo);
+    return SubmitResult.ok;
   }
 }
 
@@ -169,6 +196,138 @@ void main() {
       expect(find.text('abrir'), findsOneWidget);
       expect(find.textContaining('Hemos recibido tu evento'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
+    });
+
+    group('foto', () {
+      // Un PNG válido de 1×1 píxel.
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAC'
+        'hwGA60e6kgAAAABJRU5ErkJggg==',
+      );
+
+      Future<_PhotoClient> open(
+        WidgetTester tester,
+        Uint8List? Function() picked,
+      ) async {
+        final client = _PhotoClient();
+        await tester.binding.setSurfaceSize(const Size(400, 3200));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: EventSubmissionScreen(
+              client: client,
+              clock: () => DateTime(2026, 10, 7),
+              pickPhoto: () async => picked(),
+            ),
+          ),
+        );
+        return client;
+      }
+
+      Future<void> fill(WidgetTester tester) async {
+        Finder field(String label) => find.widgetWithText(TextFormField, label);
+        await tester.enterText(field('Nombre del evento'), 'Concierto');
+        await tester.tap(field('Fecha'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Aceptar'));
+        await tester.pumpAndSettle();
+        await tester.enterText(field('Lugar'), 'Sala Oasis');
+        await tester.enterText(field('Descripción'), 'Música en directo.');
+        await tester.enterText(
+          field('Tu nombre o el de la organización'),
+          'Asociación X',
+        );
+        await tester.enterText(
+          field('Correo o teléfono de contacto'),
+          'hola@example.org',
+        );
+      }
+
+      test('solo se aceptan JPG y PNG, mirando el contenido', () {
+        expect(isJpegOrPng(png), isTrue);
+        expect(
+          isJpegOrPng(Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0])),
+          isTrue,
+        );
+        expect(isJpegOrPng(Uint8List.fromList('%PDF-1.7'.codeUnits)), isFalse);
+        expect(isJpegOrPng(Uint8List(0)), isFalse);
+      });
+
+      testWidgets('sin foto el evento se envía igual', (tester) async {
+        final client = await open(tester, () => null);
+        await fill(tester);
+        await tester.tap(find.text('Enviar evento'));
+        await tester.pumpAndSettle();
+        expect(client.photos, [null]);
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      testWidgets('con foto pide confirmar los derechos antes de enviar', (
+        tester,
+      ) async {
+        final client = await open(tester, () => png);
+        await fill(tester);
+        await tester.tap(find.text('Añadir foto'));
+        await tester.pumpAndSettle();
+        expect(
+          find.bySemanticsLabel('Foto elegida para el evento'),
+          findsOneWidget,
+        );
+        expect(find.text('Quitar'), findsOneWidget);
+
+        await tester.tap(find.text('Enviar evento'));
+        await tester.pumpAndSettle();
+        expect(client.photos, isEmpty);
+        expect(
+          find.text(
+            'Marca la casilla para confirmar que puedes usar la imagen.',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byType(CheckboxListTile));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Enviar evento'));
+        await tester.pumpAndSettle();
+        expect(client.photos.single, png);
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      testWidgets('un PDF u otro archivo no se adjunta', (tester) async {
+        final client = await open(
+          tester,
+          () => Uint8List.fromList('%PDF-1.7 contenido'.codeUnits),
+        );
+        await tester.tap(find.text('Añadir foto'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('La foto debe ser una imagen JPG o PNG.'),
+          findsOneWidget,
+        );
+        expect(find.text('Quitar'), findsNothing);
+        expect(client.photos, isEmpty);
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      testWidgets('una foto demasiado pesada se rechaza', (tester) async {
+        final big = Uint8List(maxEventPhotoBytes + 1)
+          ..setAll(0, [0xFF, 0xD8, 0xFF]);
+        await open(tester, () => big);
+        await tester.tap(find.text('Añadir foto'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('pesa demasiado'), findsOneWidget);
+        await tester.binding.setSurfaceSize(null);
+      });
+
+      testWidgets('se puede quitar la foto elegida', (tester) async {
+        await open(tester, () => png);
+        await tester.tap(find.text('Añadir foto'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Quitar'));
+        await tester.pumpAndSettle();
+        expect(find.text('Añadir foto'), findsOneWidget);
+        expect(find.byType(CheckboxListTile), findsNothing);
+        await tester.binding.setSurfaceSize(null);
+      });
     });
 
     test('la app ya no enlaza ningún formulario de Google', () {

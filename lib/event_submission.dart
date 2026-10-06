@@ -2,7 +2,10 @@
 /// correo (asunto «Evento»), lo revisamos y, si procede, lo publicamos.
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'brand.dart';
 import 'suggestion.dart';
@@ -51,14 +54,49 @@ String buildEventDescription({
   return '${lines.join('\n')}\n\n${description.trim()}';
 }
 
+/// Tamaño máximo de la foto que se envía (el servidor admite 1,5 MB).
+const int maxEventPhotoBytes = 1400000;
+
+/// ¿Es una imagen JPG o PNG? Se mira el contenido, no el nombre del archivo.
+bool isJpegOrPng(Uint8List bytes) {
+  bool startsWith(List<int> magic) {
+    if (bytes.length < magic.length) return false;
+    for (var i = 0; i < magic.length; i++) {
+      if (bytes[i] != magic[i]) return false;
+    }
+    return true;
+  }
+
+  return startsWith(const [0xFF, 0xD8, 0xFF]) ||
+      startsWith(const [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+}
+
+/// Elige una foto del teléfono; null si el usuario cancela. Se puede
+/// sustituir en los tests.
+typedef PhotoPicker = Future<Uint8List?> Function();
+
+/// Abre la galería y devuelve la foto ya reducida (lado mayor de 1600 px y
+/// calidad media), para no gastar datos del usuario.
+Future<Uint8List?> pickPhotoFromGallery() async {
+  final file = await ImagePicker().pickImage(
+    source: ImageSource.gallery,
+    maxWidth: 1600,
+    maxHeight: 1600,
+    imageQuality: 80,
+  );
+  return file?.readAsBytes();
+}
+
 class EventSubmissionScreen extends StatefulWidget {
   final SubmissionClient client;
   final DateTime Function() clock;
+  final PhotoPicker pickPhoto;
 
   const EventSubmissionScreen({
     super.key,
     this.client = const HttpSubmissionClient(),
     this.clock = DateTime.now,
+    this.pickPhoto = pickPhotoFromGallery,
   });
 
   @override
@@ -78,6 +116,39 @@ class _EventSubmissionScreenState extends State<EventSubmissionScreen> {
   final _contact = TextEditingController();
   DateTime? _date;
   bool _sending = false;
+  Uint8List? _photo;
+  bool _photoRights = false;
+  String? _photoError;
+
+  Future<void> _addPhoto() async {
+    Uint8List? bytes;
+    try {
+      bytes = await widget.pickPhoto();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _photoError = 'No se pudo abrir la galería.');
+      return;
+    }
+    if (bytes == null || !mounted) return;
+    final picked = bytes;
+    setState(() {
+      if (!isJpegOrPng(picked)) {
+        _photoError = 'La foto debe ser una imagen JPG o PNG.';
+      } else if (picked.length > maxEventPhotoBytes) {
+        _photoError = 'La foto pesa demasiado. Elige otra más ligera.';
+      } else {
+        _photo = picked;
+        _photoRights = false;
+        _photoError = null;
+      }
+    });
+  }
+
+  void _removePhoto() => setState(() {
+    _photo = null;
+    _photoRights = false;
+    _photoError = null;
+  });
 
   @override
   void dispose() {
@@ -116,11 +187,20 @@ class _EventSubmissionScreenState extends State<EventSubmissionScreen> {
   }
 
   Future<void> _send() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final valid = _formKey.currentState?.validate() ?? false;
+    if (_photo != null && !_photoRights) {
+      setState(
+        () => _photoError =
+            'Marca la casilla para confirmar que puedes usar la imagen.',
+      );
+      return;
+    }
+    if (!valid) return;
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     setState(() => _sending = true);
-    final result = await widget.client.send(
+    final result = await widget.client.sendWithPhoto(
+      photo: _photo,
       type: 'evento',
       title: _title.text.trim(),
       description: buildEventDescription(
@@ -299,6 +379,86 @@ class _EventSubmissionScreenState extends State<EventSubmissionScreen> {
                     icon: Icons.language_rounded,
                   ),
                 ),
+                _label('FOTO O CARTEL (OPCIONAL)'),
+                if (_photo == null)
+                  OutlinedButton.icon(
+                    onPressed: _sending ? null : _addPhoto,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Brand.navy,
+                      side: const BorderSide(color: Brand.navy),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: const Text('Añadir foto'),
+                  )
+                else ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.memory(
+                      _photo!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      semanticLabel: 'Foto elegida para el evento',
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: _sending ? null : _addPhoto,
+                        icon: const Icon(Icons.swap_horiz),
+                        label: const Text('Cambiar'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _sending ? null : _removePhoto,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Brand.coralDeep,
+                        ),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Quitar'),
+                      ),
+                    ],
+                  ),
+                  CheckboxListTile(
+                    value: _photoRights,
+                    onChanged: _sending
+                        ? null
+                        : (value) => setState(() {
+                            _photoRights = value ?? false;
+                            if (_photoRights) _photoError = null;
+                          }),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: Brand.navy,
+                    title: const Text(
+                      'Tengo derecho a usar esta imagen y autorizo a '
+                      'publicarla con el evento.',
+                      style: TextStyle(fontSize: 14, height: 1.35),
+                    ),
+                  ),
+                ],
+                if (_photoError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      _photoError!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Brand.coralDeep,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Imagen JPG o PNG. La reducimos antes de enviarla.',
+                  style: TextStyle(fontSize: 12, color: Brand.slate),
+                ),
                 _label('QUIÉN LO ORGANIZA'),
                 TextFormField(
                   controller: _organizer,
@@ -326,8 +486,8 @@ class _EventSubmissionScreenState extends State<EventSubmissionScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Tu evento se envía a nuestro servidor y nos llega por '
-                  'correo. Lo revisamos antes de publicarlo y usamos tu '
+                  'Tu evento y la foto se envían a nuestro servidor y nos '
+                  'llegan por correo. Lo revisamos antes de publicarlo y usamos tu '
                   'contacto solo para hablar contigo sobre el evento; no se '
                   'muestra en la app.',
                   style: TextStyle(
