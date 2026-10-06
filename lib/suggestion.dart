@@ -223,7 +223,7 @@ class _SuggestionScreenState extends State<SuggestionScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.4,
-                    color: Color(0xFF738196),
+                    color: Brand.slate,
                   ),
                 ),
                 const SizedBox(height: 20),

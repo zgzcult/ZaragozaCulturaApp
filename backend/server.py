@@ -21,6 +21,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from pymongo import MongoClient
 
+import crashes
+import event_links
 import services
 import submissions
 import weather
@@ -157,7 +159,7 @@ APP_LANDING_PAGE = """<!DOCTYPE html>
 """
 
 PRIVACY_TEMPLATE = Path(__file__).with_name("privacy.html")
-PRIVACY_DATE = "29 de septiembre de 2026"
+PRIVACY_DATE = "7 de octubre de 2026"
 
 
 def render_privacy_page() -> str:
@@ -177,6 +179,7 @@ def render_privacy_page() -> str:
 
 
 _submission_limiter = submissions.RateLimiter()
+_crash_limiter = submissions.RateLimiter(limit=crashes.RATE_LIMIT)
 
 
 class EventHandler(BaseHTTPRequestHandler):
@@ -190,14 +193,17 @@ class EventHandler(BaseHTTPRequestHandler):
         # la respuesta.
         raw = self.rfile.read(length) if 0 < length <= submissions.MAX_BODY_BYTES else b""
 
-        if urlparse(self.path).path != "/submit":
+        # Render pasa la IP real en X-Forwarded-For.
+        forwarded = self.headers.get("X-Forwarded-For", "")
+        ip = forwarded.split(",")[0].strip() or self.client_address[0]
+        path = urlparse(self.path).path
+        if path not in ("/submit", "/crash"):
             status, body = 404, {"error": "Not found"}
         elif length > submissions.MAX_BODY_BYTES:
             status, body = 413, {"ok": False, "error": "El mensaje es demasiado largo."}
+        elif path == "/crash":
+            status, body = crashes.process_report(raw, ip, limiter=_crash_limiter)
         else:
-            # Render pasa la IP real en X-Forwarded-For.
-            forwarded = self.headers.get("X-Forwarded-For", "")
-            ip = forwarded.split(",")[0].strip() or self.client_address[0]
             status, body = submissions.process_submission(raw, ip, limiter=_submission_limiter)
 
         payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -218,6 +224,20 @@ class EventHandler(BaseHTTPRequestHandler):
             return
 
         url = urlparse(self.path)
+        if url.path.startswith("/app/evento/"):
+            # Enlace de una actividad compartida desde la app.
+            event_id = url.path[len("/app/evento/"):].strip("/")
+            event = event_links.find_event(event_id)
+            page = event_links.render_event_page(
+                event_id, event, os.environ.get("APP_STORE_URL", "").strip()
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(page)))
+            self.end_headers()
+            self.wfile.write(page)
+            return
+
         if url.path == "/app":
             # Enlace estable para compartir la app. Cuando esté publicada, basta
             # con definir APP_STORE_URL en Render para redirigir a la tienda.

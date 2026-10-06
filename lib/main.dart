@@ -11,10 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ads.dart';
+import 'crash_reporter.dart';
 import 'event_classifier.dart';
+import 'event_submission.dart';
 import 'home.dart';
 import 'legal_notice.dart';
 import 'nearby.dart';
+import 'preferences.dart';
 import 'reminders.dart';
 import 'suggestion.dart';
 import 'brand.dart';
@@ -29,6 +32,9 @@ const List<String> _eventsApiUrls = <String>[
 const String _fallbackAssetPath = 'assets/sample_events.json';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Informes de errores (solo en la versión publicada).
+  CrashReporter.install();
   // La licencia de la tipografía (SIL OFL) debe acompañar a la app: aparece en
   // la pantalla de licencias de código abierto.
   LicenseRegistry.addLicense(() async* {
@@ -128,8 +134,6 @@ String _longDateLabel(DateTime date) {
 
 /// Enlace estable para descargar la app. Lo sirve el backend y hoy muestra
 /// una página de "próximamente"; al publicar redirigirá a la tienda.
-const String _appShareUrl = 'https://zaragoza-cultura-app.onrender.com/app';
-
 /// Política de privacidad (la sirve el propio backend).
 const String _privacyUrl =
     'https://zaragoza-cultura-app.onrender.com/privacidad';
@@ -139,10 +143,6 @@ const String _privacyUrl =
 const String _androidAppId = 'com.example.zaragoza_cultura_app';
 
 const String _remindersKey = 'reminders_enabled';
-
-/// Formulario (Google Forms) donde los usuarios envían sus eventos.
-const String _submitEventUrl =
-    'https://docs.google.com/forms/d/e/1FAIpQLSdJBr0cO7DEm5b1ih6yOCCo0Lv6SjHPR1bQXYavyiNpKq0Zkg/viewform';
 
 String _creditText(dynamic value) {
   if (value is Map) {
@@ -196,6 +196,14 @@ class CulturalEvent {
   /// Fecha (AAAA-MM-DD) de la última actualización de los datos.
   final String updatedAt;
 
+  /// De dónde viene la actividad: «ayuntamiento» (agenda del Ayuntamiento de
+  /// Zaragoza) u otro origen (actividades propias o enviadas por el público).
+  final String source;
+
+  /// El Ayuntamiento indica que la entrada es gratuita. Si no publica el
+  /// precio no se sabe, y vale false.
+  final bool free;
+
   /// Fechas (AAAA-MM-DD) de comienzo y fin de todo el acto, no solo de este
   /// día. Sirven para saber si es de larga duración (exposiciones...).
   final String runStart;
@@ -226,6 +234,8 @@ class CulturalEvent {
     this.imageCredit = '',
     this.genericImage = false,
     this.updatedAt = '',
+    this.source = 'ayuntamiento',
+    this.free = false,
     this.runStart = '',
     this.runEnd = '',
     this.lat,
@@ -266,12 +276,17 @@ class CulturalEvent {
       imageCredit: _creditText(json['imageCredit']),
       genericImage: json['genericImage'] == true,
       updatedAt: (json['lastUpdated'] ?? '').toString().split('T').first,
+      source: (json['source'] ?? 'ayuntamiento').toString(),
+      free: json['free'] == true,
       runStart: (json['runStartDate'] ?? '').toString(),
       runEnd: (json['runEndDate'] ?? '').toString(),
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
     );
   }
+
+  /// ¿Es una actividad de la agenda del Ayuntamiento de Zaragoza?
+  bool get fromAyuntamiento => source == 'ayuntamiento';
 
   /// ¿El acto dura más de una semana (exposiciones, ciclos largos...)?
   bool get isLongRunning {
@@ -304,6 +319,8 @@ class CulturalEvent {
       imageCredit: imageCredit,
       genericImage: genericImage,
       updatedAt: updatedAt,
+      source: source,
+      free: free,
       runStart: start ?? runStart,
       runEnd: end ?? runEnd,
       lat: lat,
@@ -506,20 +523,28 @@ String moreInfoTarget(CulturalEvent event) {
 }
 
 /// Texto para compartir una actividad (mensajería, redes...).
+/// Enlace de una actividad en nuestra app: abre su página y, desde ella, la
+/// ficha dentro de la aplicación.
+String eventShareUrl(CulturalEvent event) =>
+    '${Brand.serverUrl}/app/evento/${event.id}';
+
+/// Texto que se comparte: los datos de la actividad y, como único enlace, el
+/// de la actividad en nuestra app.
 String buildShareText(CulturalEvent event) {
   final date = DateTime.tryParse(event.date);
   final time = _eventTimeLabel(event);
+  var summary = event.description.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (summary.length > 180) {
+    summary = '${summary.substring(0, 180).trimRight()}…';
+  }
   return [
     event.title,
     if (date != null) _longDateLabel(date),
     if (time.isNotEmpty) time,
     if (event.place.isNotEmpty) event.place,
+    if (summary.isNotEmpty) ...['', summary],
     '',
-    // Primero el enlace a la app: es el primero que las apps de mensajería
-    // usan para la vista previa.
-    'Descubre más actividades en ${Brand.name}: $_appShareUrl',
-    '',
-    'Más información oficial: ${event.officialUrl}',
+    'Míralo en ${Brand.name}: ${eventShareUrl(event)}',
   ].join('\n');
 }
 
@@ -707,6 +732,159 @@ class ZaragozaEventsRepository {
   }
 }
 
+Route<void> _opensNothing(RouteSettings settings) => PageRouteBuilder<void>(
+  settings: settings,
+  opaque: false,
+  transitionDuration: Duration.zero,
+  reverseTransitionDuration: Duration.zero,
+  pageBuilder: (_, _, _) => const _ClosesItself(),
+);
+
+/// Página vacía que se cierra sola: es lo que se abre con un enlace que no
+/// corresponde a ninguna actividad, para que solo se vea la app.
+class _ClosesItself extends StatefulWidget {
+  const _ClosesItself();
+
+  @override
+  State<_ClosesItself> createState() => _ClosesItselfState();
+}
+
+class _ClosesItselfState extends State<_ClosesItself> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).maybePop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// Identificador de la actividad de un enlace («/evento/ID» o
+/// «/app/evento/ID»), o null si la ruta no es de una actividad.
+String? eventIdFromRoute(String? route) {
+  final match = RegExp(r'^/(?:app/)?evento/([0-9a-fA-F]{8,64})/?$')
+      .firstMatch(Uri.tryParse(route ?? '')?.path ?? '');
+  return match?.group(1)?.toLowerCase();
+}
+
+/// Guarda o quita un favorito y, si los avisos están activados, los
+/// reprograma. Devuelve los favoritos resultantes.
+Future<Set<String>> toggleStoredFavorite(
+  String eventId, {
+  ZaragozaEventsRepository repository = const ZaragozaEventsRepository(),
+}) async {
+  final storage = FavoritesStorage();
+  final favorites = await storage.load();
+  if (!favorites.remove(eventId)) favorites.add(eventId);
+  await storage.save(favorites);
+  if (await loadRemindersEnabled()) {
+    await setFavoriteReminders(true, repository: repository);
+  }
+  return favorites;
+}
+
+/// Abre la ficha de una actividad a partir de su identificador: al pulsar un
+/// aviso de favoritos o un enlace compartido.
+class EventLinkScreen extends StatefulWidget {
+  final String eventId;
+  final ZaragozaEventsRepository repository;
+
+  const EventLinkScreen({
+    super.key,
+    required this.eventId,
+    this.repository = const ZaragozaEventsRepository(),
+  });
+
+  @override
+  State<EventLinkScreen> createState() => _EventLinkScreenState();
+}
+
+class _EventLinkScreenState extends State<EventLinkScreen> {
+  CulturalEvent? _event;
+  bool _loading = true;
+  bool _favorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  CulturalEvent? _find(List<CulturalEvent> events) {
+    for (final event in events) {
+      if (event.id == widget.eventId) return event;
+    }
+    return null;
+  }
+
+  Future<void> _load() async {
+    final favorites = await FavoritesStorage().load();
+    // Primero lo guardado en el teléfono; si no está, se descarga.
+    var event = _find(await widget.repository.loadCached());
+    event ??= _find(await widget.repository.fetchFresh() ?? const []);
+    if (!mounted) return;
+    setState(() {
+      _event = event;
+      _favorite = favorites.contains(widget.eventId);
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final event = _event;
+    if (event != null) {
+      return EventDetailScreen(
+        event: event,
+        isFavorite: _favorite,
+        onToggleFavorite: () =>
+            toggleStoredFavorite(event.id, repository: widget.repository),
+      );
+    }
+    return Scaffold(
+      backgroundColor: Brand.cream,
+      appBar: AppBar(title: const Text('Actividad')),
+      body: _loading
+          ? const SkeletonList(count: 1)
+          : Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.event_busy_outlined,
+                      size: 48,
+                      color: Color(0xFF9AA8B8),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Esta actividad ya no está en la agenda.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Brand.slate, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AgendaScreen(repository: widget.repository),
+                        ),
+                      ),
+                      child: const Text('Ver la agenda'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
 /// ¿Están activados los avisos de favoritos?
 Future<bool> loadRemindersEnabled() async {
   final prefs = await SharedPreferences.getInstance();
@@ -735,6 +913,7 @@ Future<bool> setFavoriteReminders(
     for (final e in events)
       if (favorites.contains(e.id))
         ReminderCandidate(
+          eventId: e.id,
           title: e.title,
           date: e.date,
           timeLabel: _eventTimeLabel(e),
@@ -764,10 +943,14 @@ class ZaragozaCulturaApp extends StatelessWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
 
+  /// Para abrir pantallas desde fuera del árbol (lo usan los tests).
+  final GlobalKey<NavigatorState>? navigatorKey;
+
   const ZaragozaCulturaApp({
     super.key,
     this.repository = const ZaragozaEventsRepository(),
     this.locationService = const DeviceLocationService(),
+    this.navigatorKey,
   });
 
   @override
@@ -787,6 +970,7 @@ class ZaragozaCulturaApp extends StatelessWidget {
           surfaceTint: Colors.transparent,
         );
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: Brand.name,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -852,6 +1036,22 @@ class ZaragozaCulturaApp extends StatelessWidget {
         ),
       ),
       builder: (context, child) => SystemNavigationBarArea(child: child!),
+      // Un enlace compartido (o el botón de su página web) abre la ficha de
+      // la actividad dentro de la app.
+      onGenerateRoute: (settings) {
+        final eventId = eventIdFromRoute(settings.name);
+        if (eventId == null) {
+          // «/inicio» (enlace genérico) solo abre la app.
+          return settings.name == '/inicio' ? _opensNothing(settings) : null;
+        }
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) =>
+              EventLinkScreen(eventId: eventId, repository: repository),
+        );
+      },
+      // Cualquier otro enlace solo abre la app: no añade ninguna pantalla.
+      onUnknownRoute: _opensNothing,
       home: HomeScreen(
         repository: repository,
         locationService: locationService,
@@ -887,6 +1087,16 @@ class _AgendaScreenState extends State<AgendaScreen> {
   DateTime selectedDate = DateTime.now();
   CulturalCategory selectedCategory = CulturalCategory.all;
   bool favoritesOnly = false;
+
+  /// Categorías que el usuario prefiere, por prioridad («Mis preferencias»).
+  List<CulturalCategory> _preferredCategories = const [];
+
+  /// Filtros de la agenda: «Todos» y después las categorías, primero las
+  /// preferidas.
+  List<CulturalCategory> get _filterCategories => [
+    CulturalCategory.all,
+    ...categoriesByPreference(_preferredCategories),
+  ];
   List<CulturalEvent> _events = <CulturalEvent>[];
   bool _isLoading = true;
   bool _isRefreshing = false;
@@ -916,7 +1126,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         child: Text(
           text,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFF66758A), height: 1.4),
+          style: const TextStyle(color: Brand.slate, height: 1.4),
         ),
       ),
     );
@@ -1019,6 +1229,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
         .where((e) => _favoriteEventIds.contains(e.id))
         .map(
           (e) => ReminderCandidate(
+            eventId: e.id,
             title: e.title,
             date: e.date,
             timeLabel: _eventTimeLabel(e),
@@ -1049,12 +1260,14 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
     final favorites = await _favoritesStorage.load();
     final cached = await _repository.loadCached();
+    final preferred = await CategoryPreferences.load();
     final prefs = await SharedPreferences.getInstance();
     _remindersEnabled = prefs.getBool(_remindersKey) ?? false;
     if (!mounted) {
       return;
     }
     setState(() {
+      _preferredCategories = preferred;
       _favoriteEventIds
         ..clear()
         ..addAll(favorites);
@@ -1201,7 +1414,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                     'Aún no tienes favoritos.\n'
                     'Pulsa el corazón de una actividad para guardarla aquí.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF66758A), height: 1.4),
+                    style: TextStyle(color: Brand.slate, height: 1.4),
                   ),
                 ],
               ),
@@ -1369,7 +1582,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                   : 'Zaragoza · ${_monthLabel(selectedDate)}',
                               style: const TextStyle(
                                 fontSize: 16,
-                                color: Color(0xFF738196),
+                                color: Brand.slate,
                               ),
                             ),
                           ],
@@ -1390,7 +1603,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                       'Actualizando actividades…',
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: Color(0xFF66758A),
+                                        color: Brand.slate,
                                       ),
                                     ),
                                   ],
@@ -1400,7 +1613,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                     const Icon(
                                       Icons.cloud_off,
                                       size: 18,
-                                      color: Color(0xFF66758A),
+                                      color: Brand.slate,
                                     ),
                                     const SizedBox(width: 8),
                                     const Expanded(
@@ -1408,7 +1621,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                                         'No se pudo actualizar. Mostrando datos guardados.',
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: Color(0xFF66758A),
+                                          color: Brand.slate,
                                         ),
                                       ),
                                     ),
@@ -1438,11 +1651,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
                           child: ListView.separated(
                             padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
                             scrollDirection: Axis.horizontal,
-                            itemCount: CulturalCategory.values.length,
-                            separatorBuilder: (_, __) =>
+                            itemCount: _filterCategories.length,
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(width: 8),
                             itemBuilder: (context, index) {
-                              final category = CulturalCategory.values[index];
+                              final category = _filterCategories[index];
                               return ChoiceChip(
                                 label: Text(_categoryLabel(category)),
                                 selected: selectedCategory == category,
@@ -1480,7 +1693,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                               Text(
                                 '${filteredEvents.length} actividades',
                                 style: const TextStyle(
-                                  color: Color(0xFF66758A),
+                                  color: Brand.slate,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1489,12 +1702,13 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         ),
                       ),
                       if (filteredEvents.isEmpty)
-                        const SliverFillRemaining(
+                        SliverFillRemaining(
                           hasScrollBody: false,
                           child: Center(
                             child: Text(
                               'No hay actividades para este día.',
-                              style: TextStyle(color: Color(0xFF66758A)),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Brand.slate),
                             ),
                           ),
                         )
@@ -1888,7 +2102,7 @@ class _DateTag extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
-              color: Brand.coral,
+              color: Brand.coralDeep,
             ),
           ),
         ],
@@ -2134,7 +2348,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     children: [
                       const Icon(
                         Icons.calendar_today_rounded,
-                        color: Brand.coral,
+                        color: Brand.coralDeep,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
@@ -2173,6 +2387,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               ? event.place
                               : '${event.place}\n${event.address}',
                         ),
+                        if (event.free) ...[
+                          const SizedBox(height: 10),
+                          const _InfoRow(
+                            icon: Icons.sell_outlined,
+                            text: 'Entrada gratuita',
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -2217,6 +2438,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ),
                     ),
                   ),
+                  // Origen de los datos: solo en las actividades que se
+                  // extraen de la agenda del Ayuntamiento, con la fecha de su
+                  // última actualización.
+                  if (event.fromAyuntamiento) ...[
+                    const SizedBox(height: 22),
+                    Text(
+                      originText(
+                        DateTime.tryParse(event.updatedAt),
+                        service: 'Servicio de Cultura',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        fontWeight: FontWeight.w600,
+                        color: Brand.slate,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2396,6 +2635,9 @@ class EventImage extends StatelessWidget {
   Widget build(BuildContext context) =>
       _EventImage(event: event, iconSize: iconSize);
 }
+
+/// Icono de una categoría.
+IconData categoryIcon(CulturalCategory category) => _categoryIcon(category);
 
 /// Nombre visible de una categoría («Música», «Teatro»...).
 String categoryLabel(CulturalCategory category) => _categoryLabel(category);
@@ -2625,10 +2867,14 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _reminders = widget.remindersEnabled;
   bool _locationAllowed = false;
+  bool _crashReports = true;
 
   @override
   void initState() {
     super.initState();
+    CrashReporter.isEnabled().then((enabled) {
+      if (mounted) setState(() => _crashReports = enabled);
+    });
     widget.locationService.hasPermission().then((allowed) {
       if (mounted) setState(() => _locationAllowed = allowed);
     });
@@ -2729,22 +2975,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _sendEvent(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    var opened = false;
-    try {
-      opened = await launchUrl(
-        Uri.parse(_submitEventUrl),
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {}
-    if (!opened) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir el formulario.')),
-      );
-    }
-  }
-
   Widget _tile({
     required IconData icon,
     required String title,
@@ -2782,9 +3012,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tile(
               icon: Icons.event_available_outlined,
               title: 'Envía tu evento',
+              subtitle: '¿Organizas algo? Cuéntanoslo y lo revisaremos.',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const EventSubmissionScreen(),
+                ),
+              ),
+            ),
+            _tile(
+              icon: Icons.tune,
+              title: 'Mis preferencias',
               subtitle:
-                  '¿Organizas algo? Rellena el formulario y lo revisaremos.',
-              onTap: () => _sendEvent(context),
+                  'Elige y ordena los tipos de actividad que más te gustan.',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PreferencesScreen()),
+              ),
             ),
             Card(
               elevation: 0,
@@ -2842,10 +3086,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tile(
               icon: Icons.lightbulb_outline,
               title: 'Sugerir mejoras',
-              subtitle: 'Cuéntanos qué cambiarías o añadirías en la app.',
+              subtitle: 'Cuéntanos qué cambiarías de la app. ¡Te escuchamos!',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SuggestionScreen()),
+              ),
+            ),
+            Card(
+              elevation: 0,
+              color: Colors.white,
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Brand.line),
+              ),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                secondary: const Icon(
+                  Icons.bug_report_outlined,
+                  color: Brand.navy,
+                ),
+                title: const Text(
+                  'Enviar informes de errores',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text(
+                  'Si la app falla, nos llega un informe técnico para corregirlo. No incluye datos personales.',
+                ),
+                value: _crashReports,
+                onChanged: (value) {
+                  setState(() => _crashReports = value);
+                  CrashReporter.setEnabled(value);
+                },
               ),
             ),
             _tile(

@@ -78,7 +78,7 @@ class ReuseNotice extends StatelessWidget {
               fontSize: 12,
               height: 1.5,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF738196),
+              color: Brand.slate,
             ),
           ),
         ],

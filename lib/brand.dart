@@ -9,6 +9,16 @@ class Brand {
   /// Nombre de la aplicación.
   static const String name = 'Maña Zaragoza';
 
+  /// Versión de la aplicación. Debe coincidir con `version:` de pubspec.yaml
+  /// (un test lo comprueba); se incluye en los informes de errores.
+  static const String appVersion = '1.0.0+1';
+
+  /// Dirección de nuestro servidor.
+  static const String serverUrl = 'https://zaragoza-cultura-app.onrender.com';
+
+  /// Esquema propio con el que un enlace abre una actividad dentro de la app.
+  static const String linkScheme = 'manazaragoza';
+
   // Paleta elegida.
   static const Color navy = Color(0xFF0B2D4A);
   static const Color coral = Color(0xFFFF6B4A);
@@ -30,6 +40,18 @@ class Brand {
 
   /// Texto secundario.
   static const Color slate = Color(0xFF5B6B80);
+
+  // Versiones oscuras de los colores de marca, para cuando van como TEXTO o
+  // icono sobre fondo claro: el coral y el azul cielo originales no alcanzan
+  // el contraste mínimo de lectura (4,5:1) y quedan para fondos y adornos.
+  /// Coral para texto e iconos sobre crema o blanco (4,7:1 sobre crema).
+  static const Color coralDeep = Color(0xFFD62700);
+
+  /// Azul cielo para texto e iconos sobre crema o blanco (4,7:1).
+  static const Color skyDeep = Color(0xFF1776A5);
+
+  /// Verde de las farmacias, legible sobre crema o blanco (4,6:1).
+  static const Color green = Color(0xFF257E55);
 
   /// Tipografía de la marca.
   static const String fontFamily = 'Montserrat';

@@ -195,10 +195,10 @@ IconData _groupIcon(String id) => switch (id) {
 };
 
 Color _groupColor(String id) => switch (id) {
-  'farmacias-guardia' => const Color(0xFF2E9E6A),
-  'centros-salud' => Brand.coral,
+  'farmacias-guardia' => Brand.green,
+  'centros-salud' => Brand.coralDeep,
   'bibliotecas' => Brand.navyLight,
-  _ => Brand.sky,
+  _ => Brand.skyDeep,
 };
 
 // ---------------------------------------------------------------------------
@@ -379,7 +379,7 @@ class _EmergencyButton extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
-                      color: Brand.coral,
+                      color: Brand.coralDeep,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -619,7 +619,7 @@ class ServiceCard extends StatelessWidget {
                         fontSize: 13,
                         height: 1.35,
                         fontWeight: FontWeight.w600,
-                        color: color == Brand.sky ? Brand.navy : color,
+                        color: color,
                       ),
                     ),
                   ),

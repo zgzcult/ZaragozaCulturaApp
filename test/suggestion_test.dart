@@ -137,7 +137,7 @@ void main() {
   });
 
   testWidgets(
-    'la ficha de una actividad ya no lleva el aviso de origen de los datos',
+    'la ficha de una actividad del Ayuntamiento lleva el aviso de origen',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final event = CulturalEvent(
@@ -150,6 +150,7 @@ void main() {
         place: 'Auditorio',
         officialUrl: 'https://www.zaragoza.es',
         timeSlots: const ['20:00'],
+        updatedAt: '2026-10-05',
       );
       await tester.binding.setSurfaceSize(const Size(400, 2000));
       await tester.pumpWidget(
@@ -164,7 +165,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Concierto de prueba'), findsOneWidget);
-      expect(find.textContaining('Origen de los datos'), findsNothing);
+      expect(
+        find.text(
+          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de '
+          'Cultura). Información actualizada por última vez el 5 de octubre '
+          'de 2026.',
+        ),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('elaboración de esta aplicación'),
         findsNothing,

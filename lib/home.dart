@@ -1,7 +1,7 @@
 /// Pantalla principal de Maña Zaragoza: saludo según la hora, accesos
-/// compactos a las secciones (agenda, sugerencias, monumentos, rutas y
-/// servicios) y bloques deslizables con contenido del día (recomendaciones,
-/// rutas, monumentos imprescindibles y farmacias de guardia).
+/// compactos a las secciones (agenda, monumentos, rutas y servicios), las
+/// recomendaciones de hoy en tarjetas cuadradas y bloques deslizables de rutas
+/// y monumentos imprescindibles.
 library;
 
 import 'dart:convert';
@@ -14,6 +14,9 @@ import 'day_suggestion.dart';
 import 'main.dart';
 import 'monuments.dart';
 import 'nearby.dart';
+import 'notifications_screen.dart';
+import 'preferences.dart';
+import 'reminders.dart';
 import 'routes.dart';
 import 'ui_kit.dart';
 import 'useful_services.dart';
@@ -107,28 +110,60 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<DaySuggestion>? _suggestions;
   List<Monument>? _monuments;
-  ServiceGroup? _pharmacies;
   int? _temperature;
   final FavoritesStorage _favoritesStorage = FavoritesStorage();
   final Set<String> _favorites = <String>{};
+  final ReminderService _reminders = ReminderService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Al pulsar un aviso de favoritos se abre su actividad, tanto si la app
+    // estaba abierta como si se abre con el aviso.
+    ReminderService.onOpen = _openEventById;
+    _reminders.launchEventId().then((eventId) {
+      if (mounted && eventId != null) _openEventById(eventId);
+    });
+    ReminderInbox.refresh();
     _loadSuggestions();
     _loadMonuments();
-    _loadPharmacies();
     widget.weatherRepository.currentTemperature().then((value) {
       if (mounted && value != null) setState(() => _temperature = value);
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (ReminderService.onOpen == _openEventById) ReminderService.onOpen = null;
+    super.dispose();
+  }
+
+  /// Al volver a la app puede haber llegado un aviso mientras tanto.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ReminderInbox.refresh();
+  }
+
+  /// Abre la ficha de una actividad por su identificador y da por leído su
+  /// aviso.
+  void _openEventById(String eventId) {
+    if (!mounted) return;
+    ReminderInbox.markRead(eventId: eventId);
+    _open(EventLinkScreen(eventId: eventId, repository: widget.repository));
+  }
+
+  void _openNotifications() =>
+      _open(NotificationsScreen(repository: widget.repository));
+
   /// Usa lo guardado en el teléfono; solo descarga si no hay nada.
   Future<void> _loadSuggestions() async {
     final favorites = await _favoritesStorage.load();
+    final preferred = await CategoryPreferences.load();
     var events = await widget.repository.loadCached();
     if (events.isEmpty) events = await widget.repository.fetchFresh() ?? [];
     if (!mounted) return;
@@ -136,7 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _favorites
         ..clear()
         ..addAll(favorites);
-      _suggestions = pickDaySuggestions(events, now: widget.clock());
+      _suggestions = pickDaySuggestions(
+        events,
+        now: widget.clock(),
+        preferred: preferred,
+      );
     });
   }
 
@@ -149,24 +188,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _monuments = fresh ?? _monuments ?? const []);
   }
 
-  Future<void> _loadPharmacies() async {
-    ServiceGroup? pick(List<ServiceGroup> groups) {
-      for (final group in groups) {
-        if (group.id == 'farmacias-guardia' && group.items.isNotEmpty) {
-          return group;
-        }
-      }
-      return null;
-    }
-
-    final cached = pick(await widget.servicesRepository.loadCached());
-    if (!mounted) return;
-    if (cached != null) setState(() => _pharmacies = cached);
-    final fresh = await widget.servicesRepository.fetchFresh();
-    if (!mounted || fresh == null) return;
-    setState(() => _pharmacies = pick(fresh) ?? _pharmacies);
-  }
-
   void _open(Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
@@ -174,21 +195,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openSettings() async {
     final reminders = await loadRemindersEnabled();
     if (!mounted) return;
-    _open(
-      SettingsScreen(
-        remindersEnabled: reminders,
-        onRemindersChanged: (enabled) =>
-            setFavoriteReminders(enabled, repository: widget.repository),
-        locationService: widget.locationService,
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          remindersEnabled: reminders,
+          onRemindersChanged: (enabled) =>
+              setFavoriteReminders(enabled, repository: widget.repository),
+          locationService: widget.locationService,
+        ),
       ),
     );
+    // Puede haber cambiado las preferencias: se reordenan las recomendaciones.
+    if (mounted) _loadSuggestions();
   }
 
   Future<void> _toggleFavorite(String id) async {
     setState(() {
       if (!_favorites.remove(id)) _favorites.add(id);
     });
-    await _favoritesStorage.save(_favorites);
+    // Guarda el favorito y, si los avisos están activados, los reprograma.
+    await toggleStoredFavorite(id, repository: widget.repository);
   }
 
   void _openEvent(CulturalEvent event) {
@@ -231,53 +258,86 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.only(top: 18, bottom: 24),
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
                           headerDateLabel(now, _temperature),
                           style: const TextStyle(
                             fontSize: 11.5,
                             letterSpacing: 1.4,
                             fontWeight: FontWeight.w600,
-                            color: Brand.coral,
+                            color: Brand.coralDeep,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${greetingFor(now)},\nmañ@',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            height: 1.12,
-                            fontWeight: FontWeight.w700,
-                            color: Brand.navy,
+                      ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: ReminderInbox.unread,
+                        builder: (context, unread, _) => IconButton(
+                          tooltip: unread == 0
+                              ? 'Avisos'
+                              : unread == 1
+                              ? 'Avisos: 1 sin leer'
+                              : 'Avisos: $unread sin leer',
+                          onPressed: _openNotifications,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Brand.navy,
+                            side: const BorderSide(color: Brand.line),
+                          ),
+                          icon: Badge(
+                            isLabelVisible: unread > 0,
+                            label: Text('$unread'),
+                            backgroundColor: Brand.coral,
+                            textColor: Brand.navy,
+                            child: const Icon(Icons.notifications_outlined),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      IconButton(
+                        tooltip: 'Ajustes',
+                        onPressed: _openSettings,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Brand.navy,
+                          side: const BorderSide(color: Brand.line),
+                        ),
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                    ],
                   ),
-                  Image.asset(
-                    'assets/brand/logo.png',
-                    width: 40,
-                    filterQuality: FilterQuality.high,
-                    semanticLabel: Brand.name,
-                    errorBuilder: (_, _, _) => const SizedBox(width: 40),
-                  ),
-                  const SizedBox(width: 10),
-                  IconButton(
-                    tooltip: 'Ajustes',
-                    onPressed: _openSettings,
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Brand.navy,
-                      side: const BorderSide(color: Brand.line),
-                    ),
-                    icon: const Icon(Icons.settings_outlined),
+                  const SizedBox(height: 8),
+                  // El logo, a la izquierda y en la misma línea del saludo.
+                  Row(
+                    children: [
+                      Image.asset(
+                        'assets/brand/logo.png',
+                        width: 56,
+                        filterQuality: FilterQuality.high,
+                        semanticLabel: Brand.name,
+                        errorBuilder: (_, _, _) => const SizedBox(width: 56),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${greetingFor(now)},\nmañ@',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              height: 1.12,
+                              fontWeight: FontWeight.w700,
+                              color: Brand.navy,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -290,14 +350,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   _Shortcut(
                     icon: Icons.calendar_month_outlined,
                     label: 'Agenda',
-                    color: Brand.sky,
+                    color: Brand.skyDeep,
                     onTap: _openAgenda,
-                  ),
-                  _Shortcut(
-                    icon: Icons.auto_awesome_outlined,
-                    label: 'Para hoy',
-                    color: Brand.coral,
-                    onTap: _openSuggestions,
                   ),
                   _Shortcut(
                     icon: Icons.account_balance_outlined,
@@ -308,13 +362,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   _Shortcut(
                     icon: Icons.alt_route_outlined,
                     label: 'Rutas',
-                    color: Brand.sky,
+                    color: Brand.skyDeep,
                     onTap: _openRoutes,
                   ),
                   _Shortcut(
                     icon: Icons.health_and_safety_outlined,
                     label: 'Servicios',
-                    color: const Color(0xFF2E9E6A),
+                    color: Brand.green,
                     onTap: () => _open(
                       UsefulServicesScreen(
                         repository: widget.servicesRepository,
@@ -331,25 +385,32 @@ class _HomeScreenState extends State<HomeScreen> {
                 action: 'Ver todo',
                 onAction: _openSuggestions,
               ),
-              SizedBox(
-                height: 196,
-                child: _suggestions == null
-                    ? const _SkeletonRow(width: 150, height: 196)
-                    : ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: _suggestions!.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final suggestion = _suggestions![index];
-                          return _SuggestionTile(
-                            suggestion: suggestion,
-                            now: now,
-                            onTap: () => _openEvent(suggestion.event),
-                          );
-                        },
-                      ),
-              ),
+              if (_suggestions == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: _SkeletonGrid(),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 1,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    children: [
+                      for (final suggestion in _suggestions!)
+                        _SuggestionTile(
+                          suggestion: suggestion,
+                          now: now,
+                          onTap: () => _openEvent(suggestion.event),
+                        ),
+                    ],
+                  ),
+                ),
             ],
             // Rutas
             _BlockHeader(
@@ -391,51 +452,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
               ),
             ],
-            // Farmacias de guardia
-            if (_pharmacies != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
-                child: Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () => _open(ServiceGroupScreen(group: _pharmacies!)),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Brand.line),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.local_pharmacy_outlined,
-                            color: Color(0xFF2E9E6A),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _pharmacies!.items.length == 1
-                                  ? '1 farmacia de guardia hoy'
-                                  : '${_pharmacies!.items.length} farmacias de guardia hoy',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: Brand.navy,
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: Brand.slate),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -537,12 +553,34 @@ class _BlockHeader extends StatelessWidget {
           ),
           TextButton(
             onPressed: onAction,
-            style: TextButton.styleFrom(foregroundColor: Brand.coral),
+            style: TextButton.styleFrom(foregroundColor: Brand.coralDeep),
             child: Text(
               action,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonGrid extends StatelessWidget {
+  const _SkeletonGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: GridView.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        children: [
+          for (var i = 0; i < 4; i++)
+            const SkeletonBox(height: double.infinity, radius: 18),
         ],
       ),
     );
@@ -574,7 +612,7 @@ class _SkeletonRow extends StatelessWidget {
   }
 }
 
-/// Tarjeta pequeña de una actividad recomendada hoy.
+/// Tarjeta cuadrada de una actividad recomendada hoy.
 class _SuggestionTile extends StatelessWidget {
   final DaySuggestion suggestion;
   final DateTime now;
@@ -598,8 +636,17 @@ class _SuggestionTile extends StatelessWidget {
             : event.timeSlots.first.split(' ').first,
       _ => 'Hoy',
     };
-    return SizedBox(
-      width: 150,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x140B2D4A),
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
       child: Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -609,9 +656,7 @@ class _SuggestionTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                height: 104,
-                width: double.infinity,
+              Expanded(
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -635,9 +680,10 @@ class _SuggestionTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            // Azul marino sobre coral: el blanco no se lee.
                             color: state == Availability.running
-                                ? Colors.white
-                                : Brand.coral,
+                                ? Brand.navy
+                                : Brand.coralDeep,
                           ),
                         ),
                       ),
@@ -660,7 +706,7 @@ class _SuggestionTile extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
                 child: Text(
                   categoryLabel(event.category),
                   maxLines: 1,

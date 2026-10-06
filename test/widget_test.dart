@@ -15,13 +15,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining(RegExp(r'Buen(os|as) ')), findsOneWidget);
-    for (final label in [
-      'Agenda',
-      'Para hoy',
-      'Monumentos',
-      'Rutas',
-      'Servicios',
-    ]) {
+    for (final label in ['Agenda', 'Monumentos', 'Rutas', 'Servicios']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
   });

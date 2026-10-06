@@ -2,15 +2,24 @@
 ///
 /// El aviso llega la tarde anterior a la actividad (18:00, hora de Zaragoza).
 /// Todo ocurre en el dispositivo: no se envía nada a ningún servidor.
+///
+/// Además se lleva un pequeño registro de los avisos (en el propio teléfono)
+/// para el buzón de la pantalla principal: los que ya han llegado y siguen sin
+/// leer.
 library;
+
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 /// Datos mínimos de una actividad para poder avisar de ella.
 class ReminderCandidate {
+  /// Identificador de la actividad: al pulsar el aviso se abre su ficha.
+  final String eventId;
   final String title;
 
   /// Fecha de la actividad, AAAA-MM-DD.
@@ -19,6 +28,7 @@ class ReminderCandidate {
   final String place;
 
   const ReminderCandidate({
+    this.eventId = '',
     required this.title,
     required this.date,
     this.timeLabel = '',
@@ -30,6 +40,9 @@ class ReminderCandidate {
 class ReminderPlan {
   final int id;
 
+  /// Actividad que origina el aviso.
+  final String eventId;
+
   /// Fecha y hora del aviso (hora local de Zaragoza).
   final DateTime when;
   final String title;
@@ -37,6 +50,7 @@ class ReminderPlan {
 
   const ReminderPlan({
     required this.id,
+    this.eventId = '',
     required this.when,
     required this.title,
     required this.body,
@@ -69,6 +83,7 @@ List<ReminderPlan> planReminders(
     plans.add(
       ReminderPlan(
         id: 0,
+        eventId: candidate.eventId,
         when: when,
         title: 'Mañana: ${candidate.title}',
         body: details.isEmpty
@@ -83,6 +98,7 @@ List<ReminderPlan> planReminders(
     for (var i = 0; i < limited.length; i++)
       ReminderPlan(
         id: i + 1,
+        eventId: limited[i].eventId,
         when: limited[i].when,
         title: limited[i].title,
         body: limited[i].body,
@@ -90,11 +106,177 @@ List<ReminderPlan> planReminders(
   ];
 }
 
+// ---------------------------------------------------------------------------
+// Buzón de avisos
+// ---------------------------------------------------------------------------
+
+/// Un aviso del registro: programado, o ya llegado (leído o no).
+class ReminderEntry {
+  final String eventId;
+  final DateTime when;
+  final String title;
+  final String body;
+  final bool read;
+
+  const ReminderEntry({
+    required this.eventId,
+    required this.when,
+    required this.title,
+    required this.body,
+    this.read = false,
+  });
+
+  ReminderEntry asRead() => ReminderEntry(
+    eventId: eventId,
+    when: when,
+    title: title,
+    body: body,
+    read: true,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'eventId': eventId,
+    'when': when.toIso8601String(),
+    'title': title,
+    'body': body,
+    'read': read,
+  };
+
+  static ReminderEntry? fromJson(dynamic json) {
+    if (json is! Map) return null;
+    final when = DateTime.tryParse((json['when'] ?? '').toString());
+    final eventId = (json['eventId'] ?? '').toString();
+    if (when == null || eventId.isEmpty) return null;
+    return ReminderEntry(
+      eventId: eventId,
+      when: when,
+      title: (json['title'] ?? '').toString(),
+      body: (json['body'] ?? '').toString(),
+      read: json['read'] == true,
+    );
+  }
+}
+
+/// Días que un aviso ya llegado se conserva en el buzón.
+const int reminderLogDays = 14;
+
+/// Registro actualizado: se conservan los avisos que ya llegaron (hasta
+/// [reminderLogDays] días) y los programados se sustituyen por [plans].
+List<ReminderEntry> mergeReminderLog(
+  List<ReminderEntry> existing,
+  List<ReminderPlan> plans, {
+  required DateTime now,
+}) {
+  final oldest = now.subtract(const Duration(days: reminderLogDays));
+  final merged = <ReminderEntry>[
+    for (final entry in existing)
+      if (!entry.when.isAfter(now) && entry.when.isAfter(oldest)) entry,
+    for (final plan in plans)
+      if (plan.eventId.isNotEmpty && plan.when.isAfter(now))
+        ReminderEntry(
+          eventId: plan.eventId,
+          when: plan.when,
+          title: plan.title,
+          body: plan.body,
+        ),
+  ];
+  merged.sort((a, b) => b.when.compareTo(a.when));
+  return merged;
+}
+
+/// Avisos que ya han llegado, del más reciente al más antiguo.
+List<ReminderEntry> deliveredReminders(
+  List<ReminderEntry> log, {
+  required DateTime now,
+}) {
+  final oldest = now.subtract(const Duration(days: reminderLogDays));
+  return [
+    for (final entry in log)
+      if (!entry.when.isAfter(now) && entry.when.isAfter(oldest)) entry,
+  ]..sort((a, b) => b.when.compareTo(a.when));
+}
+
+/// Registro de avisos guardado en el teléfono.
+class ReminderInbox {
+  const ReminderInbox._();
+
+  static const String _key = 'reminder_log';
+
+  /// Número de avisos llegados y sin leer. La campana de la pantalla
+  /// principal lo escucha.
+  static final ValueNotifier<int> unread = ValueNotifier<int>(0);
+
+  static Future<List<ReminderEntry>> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key);
+      if (raw == null) return const [];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final item in decoded)
+          if (ReminderEntry.fromJson(item) case final entry?) entry,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<void> _save(List<ReminderEntry> log) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _key,
+      jsonEncode([for (final entry in log) entry.toJson()]),
+    );
+  }
+
+  /// Actualiza el registro con los avisos recién programados.
+  static Future<void> record(List<ReminderPlan> plans, {DateTime? now}) async {
+    now ??= DateTime.now();
+    await _save(mergeReminderLog(await load(), plans, now: now));
+    await refresh(now: now);
+  }
+
+  /// Avisos llegados (para el buzón).
+  static Future<List<ReminderEntry>> delivered({DateTime? now}) async =>
+      deliveredReminders(await load(), now: now ?? DateTime.now());
+
+  /// Recalcula cuántos avisos hay sin leer.
+  static Future<int> refresh({DateTime? now}) async {
+    final pending = (await delivered(now: now)).where((e) => !e.read).length;
+    unread.value = pending;
+    return pending;
+  }
+
+  /// Marca como leído el aviso de una actividad (o todos si no se indica).
+  static Future<void> markRead({String? eventId, DateTime? now}) async {
+    now ??= DateTime.now();
+    final log = await load();
+    await _save([
+      for (final entry in log)
+        if (!entry.when.isAfter(now) &&
+            (eventId == null || entry.eventId == eventId))
+          entry.asRead()
+        else
+          entry,
+    ]);
+    await refresh(now: now);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notificaciones del sistema
+// ---------------------------------------------------------------------------
+
 /// Programa los avisos en el dispositivo (Android).
 class ReminderService {
-  final FlutterLocalNotificationsPlugin _plugin =
+  static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
-  bool _ready = false;
+  static bool _ready = false;
+
+  /// Se llama con el identificador de la actividad cuando el usuario pulsa
+  /// un aviso con la app abierta o en segundo plano.
+  static void Function(String eventId)? onOpen;
 
   static const NotificationDetails _details = NotificationDetails(
     android: AndroidNotificationDetails(
@@ -107,17 +289,39 @@ class ReminderService {
     ),
   );
 
+  static bool get _supported =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   Future<bool> _init() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
+    if (!_supported) return false;
     if (_ready) return true;
     tz_data.initializeTimeZones();
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       ),
+      onDidReceiveNotificationResponse: (response) {
+        final eventId = response.payload ?? '';
+        if (eventId.isNotEmpty) onOpen?.call(eventId);
+      },
     );
     _ready = true;
     return true;
+  }
+
+  /// Si la app se abrió al pulsar un aviso, el identificador de su
+  /// actividad; si no, null. También deja preparada la escucha de avisos.
+  Future<String?> launchEventId() async {
+    try {
+      if (!await _init()) return null;
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details == null || !details.didNotificationLaunchApp) return null;
+      final eventId = details.notificationResponse?.payload ?? '';
+      return eventId.isEmpty ? null : eventId;
+    } catch (error) {
+      debugPrint('REMINDERS launch error: $error');
+      return null;
+    }
   }
 
   /// Pide permiso para mostrar notificaciones. Devuelve si se concedió.
@@ -138,6 +342,7 @@ class ReminderService {
   /// Sustituye los avisos programados por [plans].
   Future<void> sync(List<ReminderPlan> plans) async {
     try {
+      await ReminderInbox.record(plans);
       if (!await _init()) return;
       await _plugin.cancelAll();
       final zone = tz.getLocation('Europe/Madrid');
@@ -156,6 +361,7 @@ class ReminderService {
           ),
           notificationDetails: _details,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: plan.eventId,
         );
       }
     } catch (error) {

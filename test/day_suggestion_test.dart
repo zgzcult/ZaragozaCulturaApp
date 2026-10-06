@@ -317,12 +317,9 @@ void main() {
       await tester.pumpWidget(const ZaragozaCulturaApp(repository: _Repo([])));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Para hoy'));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Hoy ya no quedan actividades'),
-        findsOneWidget,
-      );
+      // Sin actividades que recomendar, la portada no muestra el bloque.
+      expect(find.text('Hoy te recomendamos'), findsNothing);
+      expect(find.text('Ver todo'), findsNothing);
       await tester.binding.setSurfaceSize(null);
     },
   );

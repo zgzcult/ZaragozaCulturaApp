@@ -542,7 +542,7 @@ class _MonumentCard extends StatelessWidget {
                             const _Badge(
                               icon: Icons.star_rounded,
                               label: 'Imprescindible',
-                              color: Brand.coral,
+                              color: Brand.coralDeep,
                             ),
                           if (monument.top && monument.museum)
                             const SizedBox(width: 6),
@@ -770,7 +770,7 @@ class _MonumentDetailScreenState extends State<MonumentDetailScreen> {
                         const _Badge(
                           icon: Icons.star_rounded,
                           label: 'Imprescindible',
-                          color: Brand.coral,
+                          color: Brand.coralDeep,
                         ),
                       if (monument.museum)
                         const _Badge(
@@ -802,7 +802,7 @@ class _MonumentDetailScreenState extends State<MonumentDetailScreen> {
                       children: [
                         const Icon(
                           Icons.history_edu_outlined,
-                          color: Brand.coral,
+                          color: Brand.coralDeep,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
@@ -870,7 +870,7 @@ class _MonumentDetailScreenState extends State<MonumentDetailScreen> {
                       TextButton(
                         onPressed: () => setState(() => _expanded = !_expanded),
                         style: TextButton.styleFrom(
-                          foregroundColor: Brand.coral,
+                          foregroundColor: Brand.coralDeep,
                           padding: EdgeInsets.zero,
                         ),
                         child: Text(_expanded ? 'Leer menos' : 'Leer más'),
@@ -900,7 +900,7 @@ class _MonumentDetailScreenState extends State<MonumentDetailScreen> {
                       fontSize: 12,
                       height: 1.5,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF738196),
+                      color: Brand.slate,
                     ),
                   ),
                 ],

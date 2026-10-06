@@ -52,7 +52,7 @@ class AdSlot extends StatelessWidget {
       ),
       child: const Text(
         'Publicidad',
-        style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
+        style: TextStyle(fontSize: 12, color: Brand.slate),
       ),
     );
   }

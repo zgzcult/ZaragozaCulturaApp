@@ -676,7 +676,7 @@ class RouteDetailScreen extends StatelessWidget {
             'Ruta e información: Turismo de Zaragoza (Ayuntamiento de Zaragoza). '
             'La distancia y el tiempo a pie son aproximados y no incluyen las '
             'visitas.',
-            style: TextStyle(fontSize: 12, color: Color(0xFF738196)),
+            style: TextStyle(fontSize: 12, color: Brand.slate),
           ),
         ],
       ),
@@ -702,7 +702,7 @@ class _Chip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: Brand.coral),
+          Icon(icon, size: 15, color: Brand.coralDeep),
           const SizedBox(width: 5),
           Flexible(
             child: Text(

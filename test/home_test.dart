@@ -117,15 +117,10 @@ void main() {
     expect(find.text('Buenas tardes,\nmañ@'), findsOneWidget);
     expect(find.text('VIERNES 2 DE OCTUBRE · 17°'), findsOneWidget);
     expect(find.byTooltip('Ajustes'), findsOneWidget);
-    for (final label in [
-      'Agenda',
-      'Para hoy',
-      'Monumentos',
-      'Rutas',
-      'Servicios',
-    ]) {
+    for (final label in ['Agenda', 'Monumentos', 'Rutas', 'Servicios']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
+    expect(find.text('Para hoy'), findsNothing);
 
     // Hoy te recomendamos: «Ahora» para lo que está en marcha, hora si no.
     expect(find.text('Hoy te recomendamos'), findsOneWidget);
@@ -141,10 +136,59 @@ void main() {
     expect(find.text('Basílica del Pilar'), findsOneWidget);
     expect(find.text('Casa normal'), findsNothing);
 
-    expect(find.text('2 farmacias de guardia hoy'), findsOneWidget);
-    await tester.tap(find.text('2 farmacias de guardia hoy'));
+    // Ya no hay pastilla de farmacias en la portada.
+    expect(find.textContaining('farmacia'), findsNothing);
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets(
+    'las recomendaciones son tarjetas cuadradas, sin scroll lateral',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 1800));
+      await tester.pumpWidget(_home());
+      await tester.pumpAndSettle();
+      final first = tester.getSize(
+        find.ancestor(
+          of: find.text('Concierto en marcha'),
+          matching: find.byType(InkWell),
+        ),
+      );
+      expect(first.width, closeTo(first.height, 0.5));
+      // Las dos recomendaciones están una al lado de la otra.
+      final a = tester.getTopLeft(find.text('Concierto en marcha'));
+      final b = tester.getTopLeft(find.text('Obra de la noche'));
+      expect(a.dy, closeTo(b.dy, 40));
+      expect(a.dx, isNot(closeTo(b.dx, 1)));
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+
+  testWidgets('«Ver todo» abre la pantalla de sugerencias', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1800));
+    await tester.pumpWidget(_home());
     await tester.pumpAndSettle();
-    expect(find.text('Farmacia Uno'), findsOneWidget);
+    await tester.tap(find.text('Ver todo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hoy te recomendamos esto'), findsOneWidget);
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('el logo va a la izquierda, en la línea del saludo', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1800));
+    await tester.pumpWidget(_home());
+    await tester.pumpAndSettle();
+    final logo = tester.getRect(find.bySemanticsLabel('Maña Zaragoza'));
+    final greeting = tester.getRect(find.text('Buenas tardes,\nmañ@'));
+    expect(logo.right, lessThan(greeting.left));
+    // Misma línea: el centro del logo cae dentro de la altura del saludo.
+    expect(logo.center.dy, inInclusiveRange(greeting.top, greeting.bottom));
+    // La campana de avisos está junto a Ajustes.
+    final bell = tester.getRect(find.byTooltip('Avisos'));
+    final settings = tester.getRect(find.byTooltip('Ajustes'));
+    expect(bell.right, lessThanOrEqualTo(settings.left));
+    expect((bell.center.dy - settings.center.dy).abs(), lessThan(1));
     await tester.binding.setSurfaceSize(null);
   });
 

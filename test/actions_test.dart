@@ -77,6 +77,13 @@ void main() {
       expect(plans.first.when.isBefore(plans.last.when), isTrue);
     });
 
+    test('el aviso lleva el identificador de su actividad', () {
+      final plans = planReminders(const [
+        ReminderCandidate(eventId: 'abc', title: 'Jazz', date: '2026-10-10'),
+      ], now: now);
+      expect(plans.single.eventId, 'abc');
+    });
+
     test('ignora fechas inválidas', () {
       final plans = planReminders(const [
         ReminderCandidate(title: 'X', date: 'no-es-fecha'),
@@ -86,25 +93,45 @@ void main() {
   });
 
   group('Compartir', () {
-    test('incluye título, fecha, horario, lugar y enlace oficial', () {
+    test('incluye título, fecha, horario, lugar y descripción', () {
       final text = buildShareText(_event(slots: ['20:30–22:00']));
       expect(text, contains('Noche de jazz'));
       expect(text, contains('sábado, 10 de octubre'));
       expect(text, contains('20:30–22:00'));
       expect(text, contains('Teatro Principal'));
-      expect(
-        text,
-        contains('https://www.zaragoza.es/sede/servicio/cultura/evento/1'),
-      );
+      expect(text, contains('Descripción'));
     });
 
-    test('el enlace a la app va antes que el enlace oficial', () {
+    test('el único enlace es el de la actividad en nuestra app', () {
       final text = buildShareText(_event(slots: ['20:30']));
-      final app = text.indexOf('/app');
-      final official = text.indexOf('zaragoza.es/sede');
-      expect(app, greaterThan(0));
-      expect(official, greaterThan(app));
-      expect(text, contains('Maña Zaragoza'));
+      expect(
+        text,
+        contains(
+          'Míralo en Maña Zaragoza: '
+          'https://zaragoza-cultura-app.onrender.com/app/evento/e1',
+        ),
+      );
+      expect(RegExp('https?://').allMatches(text), hasLength(1));
+      // Ya no lleva el enlace del Ayuntamiento.
+      expect(text, isNot(contains('zaragoza.es')));
+    });
+
+    test('la descripción se recorta', () {
+      final long = CulturalEvent(
+        id: 'e2',
+        title: 'Larga',
+        description: List.filled(60, 'palabra').join('  \n'),
+        category: CulturalCategory.musica,
+        date: '2026-10-10',
+        time: '',
+        place: '',
+        officialUrl: 'https://www.zaragoza.es',
+      );
+      final text = buildShareText(long);
+      expect(text, contains('…'));
+      expect(text, isNot(contains('palabra  \n')));
+      final summary = text.split('\n').firstWhere((l) => l.contains('…'));
+      expect(summary.length, lessThanOrEqualTo(181));
     });
 
     test('sin horario no deja huecos ni escribe "Horario por confirmar"', () {

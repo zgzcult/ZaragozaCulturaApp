@@ -381,6 +381,28 @@ def coordinates_of(obj: Any) -> Optional[tuple]:
     return (round(lat, 6), round(lng, 6))
 
 
+def is_free(source: Dict[str, Any]) -> bool:
+    """¿El Ayuntamiento indica que la actividad es gratuita?
+
+    Solo es True cuando el acto publica sus tarifas y todas valen 0 € (o son
+    del grupo «Gratuita»). Si no publica precio no se sabe, y se devuelve False:
+    el filtro «Gratis» de la app solo enseña las gratuitas confirmadas."""
+    fares = source.get("price")
+    if not isinstance(fares, list) or not fares:
+        return False
+    for fare in fares:
+        if not isinstance(fare, dict):
+            return False
+        group = normalize_text(fare.get("fareGroup")).lower()
+        value = fare.get("hasCurrencyValue")
+        if group.startswith("gratuit") and not value:
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0:
+            continue
+        return False
+    return True
+
+
 def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Optional[set[str]] = None) -> List[Dict[str, Any]]:
     source_id = str(source.get("id", ""))
     if public_ids is not None and source_id not in public_ids:
@@ -403,6 +425,7 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
         + [normalize_text(item.get("title")) for item in source.get("category", []) if isinstance(item, dict)]
     )
     category = detect_category(category_text, official_url)
+    free = is_free(source)
     output: List[Dict[str, Any]] = []
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     horizon = today + timedelta(days=366)
@@ -452,6 +475,7 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
                     "imageUrl": normalize_text(source.get("image")),
                     "source": "ayuntamiento",
                     "sourceId": str(source.get("id", "")),
+                    "free": free,
                     "endDate": event_date,
                     # Duración total del acto (no de este día): la app lo usa
                     # para dejar al final las actividades de larga duración.

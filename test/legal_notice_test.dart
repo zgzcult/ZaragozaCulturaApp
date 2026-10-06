@@ -131,7 +131,9 @@ void main() {
       expect(find.textContaining('Origen de los datos'), findsNothing);
     });
 
-    testWidgets('la ficha de una actividad sigue sin el aviso', (tester) async {
+    testWidgets('la ficha lleva el aviso con la fecha de la actividad', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(400, 2000));
       await tester.pumpWidget(
         MaterialApp(
@@ -143,8 +145,65 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de '
+          'Cultura). Información actualizada por última vez el 5 de octubre '
+          'de 2026.',
+        ),
+        findsOneWidget,
+      );
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    testWidgets('una actividad que no es del Ayuntamiento no lleva el aviso', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(400, 2000));
+      final propia = CulturalEvent(
+        id: 'p1',
+        title: 'Concierto propio',
+        description: '',
+        category: CulturalCategory.musica,
+        date: _today(),
+        time: '',
+        place: 'Sala',
+        officialUrl: 'https://example.org',
+        source: 'propia',
+      );
+      expect(propia.fromAyuntamiento, isFalse);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventDetailScreen(
+            event: propia,
+            isFavorite: false,
+            onToggleFavorite: () {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
       expect(find.textContaining('Origen de los datos'), findsNothing);
       await tester.binding.setSurfaceSize(null);
+    });
+
+    test('el origen se lee del dato y por defecto es el Ayuntamiento', () {
+      final base = {'id': '1', 'title': 'x', 'date': '2026-10-10'};
+      expect(CulturalEvent.fromJson(base).fromAyuntamiento, isTrue);
+      expect(
+        CulturalEvent.fromJson({...base, 'source': 'ayuntamiento'})
+            .fromAyuntamiento,
+        isTrue,
+      );
+      expect(
+        CulturalEvent.fromJson({...base, 'source': 'propia'}).fromAyuntamiento,
+        isFalse,
+      );
+      expect(
+        CulturalEvent.fromJson({...base, 'source': 'propia'})
+            .withTimeSlots(const ['10:00'])
+            .fromAyuntamiento,
+        isFalse,
+      );
     });
   });
 }

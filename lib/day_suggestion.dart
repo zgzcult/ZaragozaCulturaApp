@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'event_classifier.dart';
 import 'main.dart';
 import 'brand.dart';
+import 'preferences.dart';
 import 'ui_kit.dart';
 
 // ---------------------------------------------------------------------------
@@ -95,9 +96,11 @@ String _clock(int minutesFromMidnight) {
 List<DaySuggestion> pickDaySuggestions(
   List<CulturalEvent> events, {
   required DateTime now,
+  List<CulturalCategory> preferred = const [],
 }) {
   final suggestions = <DaySuggestion>[];
-  for (final category in suggestionCategories) {
+  // Primero las categorías que el usuario prefiere, por su prioridad.
+  for (final category in categoriesByPreference(preferred)) {
     CulturalEvent? best;
     var bestScore = -1 << 30;
     String bestReason = 'Disponible hoy';
@@ -167,10 +170,14 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
   List<CulturalEvent> _events = const <CulturalEvent>[];
   bool _loading = true;
   bool _failed = false;
+  List<CulturalCategory> _preferred = const [];
 
   @override
   void initState() {
     super.initState();
+    CategoryPreferences.load().then((value) {
+      if (mounted) setState(() => _preferred = value);
+    });
     _load();
   }
 
@@ -249,7 +256,11 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final suggestions = pickDaySuggestions(_events, now: widget.clock());
+    final suggestions = pickDaySuggestions(
+      _events,
+      now: widget.clock(),
+      preferred: _preferred,
+    );
 
     Widget body;
     if (_loading) {
@@ -264,7 +275,7 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
               const Text(
                 'No se pudieron cargar las actividades. Comprueba tu conexión.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF66758A), height: 1.4),
+                style: TextStyle(color: Brand.slate, height: 1.4),
               ),
               const SizedBox(height: 16),
               FilledButton(onPressed: _load, child: const Text('Reintentar')),
@@ -280,7 +291,7 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
             'Hoy ya no quedan actividades a las que asistir. '
             'Mira la agenda de mañana en «Actividades».',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF66758A), height: 1.4),
+            style: TextStyle(color: Brand.slate, height: 1.4),
           ),
         ),
       );
@@ -290,7 +301,7 @@ class _SuggestionOfDayScreenState extends State<SuggestionOfDayScreen> {
         children: [
           const Text(
             'Una propuesta de cada tipo, para hoy.',
-            style: TextStyle(fontSize: 14, color: Color(0xFF66758A)),
+            style: TextStyle(fontSize: 14, color: Brand.slate),
           ),
           for (final suggestion in suggestions) _suggestionItem(suggestion),
         ],
