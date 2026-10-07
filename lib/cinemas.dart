@@ -37,18 +37,18 @@ const List<Cinema> zaragozaCinemas = [
   Cinema(
     name: 'Cine Cervantes',
     address: 'Calle del Marqués de Casa Jiménez, 2, 50004 Zaragoza',
-    url: 'https://www.cinespalafox.com/',
+    url: 'https://www.cinespalafox.com/cine/cervantes',
   ),
   Cinema(
     name: 'Cines Aragonia',
     address: 'Avenida Juan Carlos I, 44, 50009 Zaragoza',
-    url: 'https://www.cinespalafox.com/',
+    url: 'https://www.cinespalafox.com/cine/cinesaragonia',
     note: 'Centro comercial Aragonia',
   ),
   Cinema(
     name: 'Cinesa GranCasa',
     address: 'Calle de María Zambrano, 35, 50018 Zaragoza',
-    url: 'https://www.cinesa.es/Cines/grancasa/',
+    url: 'https://www.cinesa.es/cines/grancasa/',
     note: 'Centro comercial GranCasa',
   ),
   Cinema(
@@ -60,7 +60,7 @@ const List<Cinema> zaragozaCinemas = [
   Cinema(
     name: 'Artesiete La Torre',
     address: 'Autovía de Logroño, 50011 Zaragoza',
-    url: 'https://latorre.artesiete.es/Cine/21/Artesiete-La-Torre',
+    url: 'https://latorre.artesiete.es/Cine/21/artesiete-la-torre',
     note: 'La Torre Outlet',
   ),
   Cinema(
