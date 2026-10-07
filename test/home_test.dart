@@ -119,9 +119,10 @@ void main() {
     expect(find.byTooltip('Ajustes'), findsOneWidget);
     for (final label in [
       'Agenda',
-      'Fin de semana',
+      'Sugerencias fin de semana',
       'Monumentos',
       'Rutas',
+      'Cine',
       'Servicios',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);

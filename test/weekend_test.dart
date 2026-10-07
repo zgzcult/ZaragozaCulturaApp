@@ -249,14 +249,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       double x(String label) => tester.getCenter(find.text(label)).dx;
-      expect(x('Agenda'), lessThan(x('Fin de semana')));
-      expect(x('Fin de semana'), lessThan(x('Monumentos')));
-      expect(
-        find.bySemanticsLabel('Sugerencias fin de semana'),
-        findsOneWidget,
-      );
+      expect(x('Agenda'), lessThan(x('Sugerencias fin de semana')));
+      expect(x('Sugerencias fin de semana'), lessThan(x('Monumentos')));
 
-      await tester.tap(find.text('Fin de semana'));
+      await tester.tap(find.text('Sugerencias fin de semana'));
       await tester.pumpAndSettle();
       expect(find.byType(WeekendScreen), findsOneWidget);
       await tester.binding.setSurfaceSize(null);

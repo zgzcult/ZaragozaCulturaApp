@@ -48,15 +48,22 @@ void main() {
   runApp(const ZaragozaCulturaApp());
 }
 
-/// Reserva el espacio de los botones de navegación de Android y lo pinta de
-/// azul marino con los botones en claro: así ningún contenido queda debajo
-/// de ellos y siempre se distinguen del fondo crema.
+/// Reserva las dos franjas del sistema y las pinta de azul marino con sus
+/// iconos en claro: arriba la barra de estado (hora, cobertura, batería) y
+/// abajo los botones de navegación de Android. Así siempre se leen, sea cual
+/// sea el fondo de la pantalla, y ningún contenido queda debajo de ellas.
 class SystemNavigationBarArea extends StatelessWidget {
   final Widget child;
 
   const SystemNavigationBarArea({super.key, required this.child});
 
   static const SystemUiOverlayStyle style = SystemUiOverlayStyle(
+    // Barra de estado: transparente (se ve nuestra franja) e iconos claros.
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark, // iOS: fondo oscuro, texto claro
+    systemStatusBarContrastEnforced: false,
+    // Botones de navegación.
     systemNavigationBarColor: Colors.transparent,
     systemNavigationBarDividerColor: Colors.transparent,
     systemNavigationBarIconBrightness: Brightness.light,
@@ -66,6 +73,7 @@ class SystemNavigationBarArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final top = media.viewPadding.top;
     final bottom = media.viewPadding.bottom;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: style,
@@ -73,11 +81,12 @@ class SystemNavigationBarArea extends StatelessWidget {
         color: Brand.navy,
         child: Column(
           children: [
+            SizedBox(height: top),
             Expanded(
               child: MediaQuery(
                 data: media
-                    .removeViewPadding(removeBottom: true)
-                    .removePadding(removeBottom: true)
+                    .removeViewPadding(removeTop: true, removeBottom: true)
+                    .removePadding(removeTop: true, removeBottom: true)
                     .copyWith(
                       // El teclado ya cubre la franja reservada.
                       viewInsets: media.viewInsets.copyWith(

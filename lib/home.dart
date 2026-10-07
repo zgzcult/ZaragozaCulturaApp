@@ -1,5 +1,6 @@
 /// Pantalla principal de Maña Zaragoza: saludo según la hora, accesos
-/// compactos a las secciones (agenda, monumentos, rutas y servicios), las
+/// a las secciones en dos filas (agenda, fin de semana, monumentos, rutas,
+/// cine y servicios), las
 /// recomendaciones de hoy en tarjetas cuadradas y bloques deslizables de rutas
 /// y monumentos imprescindibles.
 library;
@@ -10,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'brand.dart';
+import 'cinemas.dart';
 import 'day_suggestion.dart';
 import 'main.dart';
 import 'monuments.dart';
@@ -350,44 +352,63 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(height: 22),
+            // Accesos a las secciones: dos filas de tres.
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Row(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
                 children: [
-                  _Shortcut(
-                    icon: Icons.calendar_month_outlined,
-                    label: 'Agenda',
-                    color: Brand.skyDeep,
-                    onTap: _openAgenda,
-                  ),
-                  _Shortcut(
-                    icon: Icons.weekend_outlined,
-                    label: 'Fin de semana',
-                    semanticsLabel: 'Sugerencias fin de semana',
-                    color: Brand.coralDeep,
-                    onTap: _openWeekend,
-                  ),
-                  _Shortcut(
-                    icon: Icons.account_balance_outlined,
-                    label: 'Monumentos',
-                    color: Brand.navy,
-                    onTap: _openMonuments,
-                  ),
-                  _Shortcut(
-                    icon: Icons.alt_route_outlined,
-                    label: 'Rutas',
-                    color: Brand.skyDeep,
-                    onTap: _openRoutes,
-                  ),
-                  _Shortcut(
-                    icon: Icons.health_and_safety_outlined,
-                    label: 'Servicios',
-                    color: Brand.green,
-                    onTap: () => _open(
-                      UsefulServicesScreen(
-                        repository: widget.servicesRepository,
+                  Row(
+                    children: [
+                      _Shortcut(
+                        icon: Icons.calendar_month_outlined,
+                        label: 'Agenda',
+                        color: Brand.skyDeep,
+                        onTap: _openAgenda,
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      _Shortcut(
+                        icon: Icons.weekend_outlined,
+                        label: 'Sugerencias fin de semana',
+                        color: Brand.coralDeep,
+                        onTap: _openWeekend,
+                      ),
+                      const SizedBox(width: 10),
+                      _Shortcut(
+                        icon: Icons.account_balance_outlined,
+                        label: 'Monumentos',
+                        color: Brand.navy,
+                        onTap: _openMonuments,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _Shortcut(
+                        icon: Icons.alt_route_outlined,
+                        label: 'Rutas',
+                        color: Brand.skyDeep,
+                        onTap: _openRoutes,
+                      ),
+                      const SizedBox(width: 10),
+                      _Shortcut(
+                        icon: Icons.movie_outlined,
+                        label: 'Cine',
+                        color: Brand.coralDeep,
+                        onTap: () => _open(const CinemasScreen()),
+                      ),
+                      const SizedBox(width: 10),
+                      _Shortcut(
+                        icon: Icons.health_and_safety_outlined,
+                        label: 'Servicios',
+                        color: Brand.green,
+                        onTap: () => _open(
+                          UsefulServicesScreen(
+                            repository: widget.servicesRepository,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -426,22 +447,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
             ],
-            // Rutas
-            _BlockHeader(
-              title: 'Rutas culturales',
-              action: 'Ver todas',
-              onAction: _openRoutes,
-            ),
-            _monuments == null
-                ? const SizedBox(
-                    height: 120,
-                    child: _SkeletonRow(width: 190, height: 120),
-                  )
-                : RoutesCarousel(
-                    monuments: _monuments!,
-                    height: 120,
-                    cardWidth: 190,
-                  ),
+            // Rutas. Si no se han podido cargar los monumentos el bloque no se
+            // muestra: saldrían rutas «con 0 paradas».
+            if (_monuments == null || _monuments!.isNotEmpty) ...[
+              _BlockHeader(
+                title: 'Rutas culturales',
+                action: 'Ver todas',
+                onAction: _openRoutes,
+              ),
+              _monuments == null
+                  ? const SizedBox(
+                      height: 120,
+                      child: _SkeletonRow(width: 190, height: 120),
+                    )
+                  : RoutesCarousel(
+                      monuments: _monuments!,
+                      height: 120,
+                      cardWidth: 190,
+                    ),
+            ],
             // Imprescindibles
             if (_monuments == null || top.isNotEmpty) ...[
               _BlockHeader(
@@ -473,23 +497,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
-/// Acceso compacto a una sección: icono en un cuadrado redondeado y nombre.
+/// Acceso a una sección: tarjeta con el icono y el nombre (hasta dos líneas).
 class _Shortcut extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
-  /// Nombre completo para los lectores de pantalla, si la etiqueta visible
-  /// va abreviada.
-  final String? semanticsLabel;
-
   const _Shortcut({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
-    this.semanticsLabel,
   });
 
   @override
@@ -497,51 +516,56 @@ class _Shortcut extends StatelessWidget {
     return Expanded(
       child: Semantics(
         button: true,
-        label: semanticsLabel ?? label,
+        label: label,
         excludeSemantics: true,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Brand.line),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0F0B2D4A),
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0F0B2D4A),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: Brand.line),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 14, 4, 10),
+                child: Column(
+                  children: [
+                    Icon(icon, color: color, size: 28),
+                    const SizedBox(height: 8),
+                    // Alto fijo para dos líneas: todas las tarjetas miden lo
+                    // mismo aunque el nombre ocupe una sola.
+                    SizedBox(
+                      height: 30,
+                      child: Center(
+                        child: Text(
+                          label,
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
+                            color: Brand.navy,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                  child: Icon(icon, color: color, size: 26),
-                ),
-                const SizedBox(height: 6),
-                // Hasta dos líneas («Fin de semana»); el alto es fijo para que
-                // todos los accesos queden alineados.
-                SizedBox(
-                  height: 30,
-                  child: Text(
-                    label,
-                    maxLines: 2,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      height: 1.2,
-                      fontWeight: FontWeight.w600,
-                      color: Brand.navy,
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

@@ -124,12 +124,6 @@ class _NotificationSettingsScreenState
               onChanged: (value) =>
                   _toggle(value, widget.onWeekendChanged, (v) => _weekend = v),
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Los avisos se programan en tu propio móvil: no se envía nada a '
-              'ningún servidor.',
-              style: TextStyle(fontSize: 12, color: Brand.slate),
-            ),
           ],
         ),
       ),

@@ -148,39 +148,45 @@ void main() {
     }
   });
 
-  testWidgets('el contenido no queda bajo los botones de navegación', (
+  testWidgets('las franjas del sistema son azul marino con iconos claros', (
     tester,
   ) async {
-    double? childBottomPadding;
+    EdgeInsets? childPadding;
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(
           size: Size(400, 800),
-          viewPadding: EdgeInsets.only(bottom: 48),
-          padding: EdgeInsets.only(bottom: 48),
+          viewPadding: EdgeInsets.only(top: 32, bottom: 48),
+          padding: EdgeInsets.only(top: 32, bottom: 48),
         ),
         child: Directionality(
           textDirection: TextDirection.ltr,
           child: SystemNavigationBarArea(
             child: Builder(
               builder: (context) {
-                childBottomPadding = MediaQuery.paddingOf(context).bottom;
-                return const SizedBox.expand();
+                childPadding = MediaQuery.paddingOf(context);
+                return const SizedBox.expand(key: Key('contenido'));
               },
             ),
           ),
         ),
       ),
     );
-    // La app recibe el espacio ya descontado y la franja es azul marino.
-    expect(childBottomPadding, 0);
-    expect(tester.getSize(find.byType(SizedBox).last).height, 48);
+    // La app recibe el espacio ya descontado, arriba y abajo: ningún
+    // contenido queda bajo la barra de estado ni bajo los botones.
+    expect(childPadding, EdgeInsets.zero);
+    final content = tester.getRect(find.byKey(const Key('contenido')));
+    expect(content.top, 32);
+    final screen = tester.getSize(find.byType(SystemNavigationBarArea));
+    expect(content.bottom, screen.height - 48);
+    // Las dos franjas se pintan de azul marino...
     final box = tester.widget<ColoredBox>(find.byType(ColoredBox).first);
     expect(box.color, Brand.navy);
-    expect(
-      SystemNavigationBarArea.style.systemNavigationBarIconBrightness,
-      Brightness.light,
-    );
+    // ...y sus iconos van en claro: hora, cobertura y batería se leen.
+    const style = SystemNavigationBarArea.style;
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+    expect(style.systemNavigationBarIconBrightness, Brightness.light);
   });
 
   testWidgets('La aplicación arranca directamente en la pantalla principal', (
