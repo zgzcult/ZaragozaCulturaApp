@@ -36,7 +36,7 @@ const List<Cinema> zaragozaCinemas = [
   ),
   Cinema(
     name: 'Cine Cervantes',
-    address: 'Calle Marqués de Casa Jiménez, 50004 Zaragoza',
+    address: 'Calle del Marqués de Casa Jiménez, 2, 50004 Zaragoza',
     url: 'https://www.cinespalafox.com/',
   ),
   Cinema(

@@ -38,6 +38,9 @@ class CityRoute {
   /// Duración de la visita guiada oficial, si la página la indica.
   final String guidedDuration;
   final String sourceUrl;
+
+  /// Foto de portada: la de cabecera de la página oficial de la ruta.
+  final String image;
   final IconData icon;
   final List<RouteStop> stops;
 
@@ -47,6 +50,7 @@ class CityRoute {
     required this.subtitle,
     required this.intro,
     required this.sourceUrl,
+    required this.image,
     required this.icon,
     required this.stops,
     this.guidedDuration = '',
@@ -58,6 +62,7 @@ const String _turismo = 'https://www.zaragoza.es/sede/portal/turismo';
 const List<CityRoute> cityRoutes = [
   CityRoute(
     id: 'caesaraugusta',
+    image: 'https://www.zaragoza.es/cont/assets/img/turismo/post/ruta-de-cesar-augusta.jpg',
     title: 'Zaragoza romana',
     subtitle: 'Ruta de Caesaraugusta',
     icon: Icons.account_balance_outlined,
@@ -89,6 +94,7 @@ const List<CityRoute> cityRoutes = [
   ),
   CityRoute(
     id: 'mudejar',
+    image: 'https://www.zaragoza.es/cont/paginas/turismo/imagen/dest_paseomudejar.jpg',
     title: 'Mudéjar Patrimonio Mundial',
     subtitle: 'Ruta Mudéjar',
     icon: Icons.mosque_outlined,
@@ -111,6 +117,7 @@ const List<CityRoute> cityRoutes = [
   ),
   CityRoute(
     id: 'renacentista',
+    image: 'https://www.zaragoza.es/cont/paginas/turismo/imagen/vistrenac.jpg',
     title: 'La Zaragoza del Renacimiento',
     subtitle: 'Paseo Renacentista',
     icon: Icons.castle_outlined,
@@ -132,6 +139,8 @@ const List<CityRoute> cityRoutes = [
   ),
   CityRoute(
     id: 'goya',
+    image:
+        'https://www.zaragoza.es/cont/assets/img/turismo/post/paseo-goya.jpg',
     title: 'Zaragoza de Goya',
     subtitle: 'Tras los pasos del pintor',
     icon: Icons.palette_outlined,
@@ -152,6 +161,7 @@ const List<CityRoute> cityRoutes = [
   ),
   CityRoute(
     id: 'sitios',
+    image: 'https://www.basilicasantaengracia.es/wp-content/uploads/2019/01/basilica-santa-engracia_opt.jpg',
     title: 'Los Sitios de Zaragoza',
     subtitle: '1808-1809',
     icon: Icons.flag_outlined,
@@ -373,13 +383,6 @@ class _RoutesScreenState extends State<RoutesScreen> {
 
   Widget _routeCard(CityRoute route) {
     final stops = resolveStops(route, _monuments);
-    final cover = stops
-        .map((s) => s.monument)
-        .whereType<Monument>()
-        .firstWhere(
-          (m) => m.image.isNotEmpty,
-          orElse: () => const Monument(id: '', name: ''),
-        );
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: SizedBox(
@@ -387,7 +390,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
         child: _RouteCard(
           route: route,
           stopsCount: stops.length,
-          image: cover.image,
+          image: route.image,
           width: double.infinity,
           onTap: () => Navigator.push(
             context,
@@ -463,17 +466,10 @@ class RoutesCarousel extends StatelessWidget {
         itemBuilder: (context, index) {
           final route = cityRoutes[index];
           final stops = resolveStops(route, monuments);
-          final cover = stops
-              .map((s) => s.monument)
-              .whereType<Monument>()
-              .firstWhere(
-                (m) => m.image.isNotEmpty,
-                orElse: () => const Monument(id: '', name: ''),
-              );
           return _RouteCard(
             route: route,
             stopsCount: stops.length,
-            image: cover.image,
+            image: route.image,
             width: cardWidth,
             onTap: () => Navigator.push(
               context,

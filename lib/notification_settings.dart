@@ -106,7 +106,9 @@ class _NotificationSettingsScreenState
             _switch(
               icon: Icons.notifications_active_outlined,
               title: 'Avisos de mis favoritos',
-              subtitle: 'Te avisamos la tarde anterior (18:00) de cada actividad que hayas guardado.',
+              subtitle:
+                  'Te avisamos un día antes para no perderte tus actividades '
+                  'favoritas.',
               value: _reminders,
               onChanged: (value) => _toggle(
                 value,
@@ -115,11 +117,11 @@ class _NotificationSettingsScreenState
               ),
             ),
             _switch(
-              icon: Icons.weekend_outlined,
+              icon: Icons.celebration_outlined,
               title: 'Sugerencias para el fin de semana',
               subtitle:
-                  'Cada jueves por la tarde te avisamos de que ya puedes ver '
-                  'las sugerencias para el sábado y el domingo.',
+                  'Cada jueves te avisamos de las recomendaciones para el '
+                  'sábado y el domingo.',
               value: _weekend,
               onChanged: (value) =>
                   _toggle(value, widget.onWeekendChanged, (v) => _weekend = v),

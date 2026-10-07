@@ -367,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(width: 10),
                       _Shortcut(
-                        icon: Icons.weekend_outlined,
+                        icon: Icons.celebration_outlined,
                         label: 'Sugerencias fin de semana',
                         color: Brand.coralDeep,
                         onTap: _openWeekend,

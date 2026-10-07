@@ -182,8 +182,7 @@ void main() {
         MaterialApp(home: NotificationsScreen(clock: () => _now)),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('No tienes avisos'), findsOneWidget);
-      expect(find.textContaining('Ajustes'), findsOneWidget);
+      expect(find.text('No tienes avisos.'), findsOneWidget);
     });
 
     testWidgets('la campana de la portada muestra los avisos sin leer', (

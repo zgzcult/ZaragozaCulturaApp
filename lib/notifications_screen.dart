@@ -51,7 +51,6 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   List<ReminderEntry>? _entries;
-  bool _remindersEnabled = true;
 
   @override
   void initState() {
@@ -61,12 +60,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _load() async {
     final entries = await ReminderInbox.delivered(now: widget.clock());
-    final enabled = await loadRemindersEnabled();
     if (!mounted) return;
-    setState(() {
-      _entries = entries;
-      _remindersEnabled = enabled;
-    });
+    setState(() => _entries = entries);
   }
 
   Future<void> _open(ReminderEntry entry) async {
@@ -109,14 +104,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 color: Color(0xFF9AA8B8),
               ),
               const SizedBox(height: 12),
-              Text(
-                _remindersEnabled
-                    ? 'No tienes avisos.\nTe avisaremos la tarde anterior a '
-                          'tus actividades favoritas.'
-                    : 'No tienes avisos.\nActiva «Avisos de mis favoritos» en '
-                          'Ajustes para recibirlos.',
+              const Text(
+                'No tienes avisos.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Brand.slate, height: 1.4),
+                style: TextStyle(color: Brand.slate, height: 1.4),
               ),
             ],
           ),
