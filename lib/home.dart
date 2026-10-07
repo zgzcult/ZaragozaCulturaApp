@@ -20,6 +20,7 @@ import 'reminders.dart';
 import 'routes.dart';
 import 'ui_kit.dart';
 import 'useful_services.dart';
+import 'weekend.dart';
 
 const String _weatherUrl = 'https://zaragoza-cultura-app.onrender.com/weather';
 
@@ -149,13 +150,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) ReminderInbox.refresh();
   }
 
-  /// Abre la ficha de una actividad por su identificador y da por leído su
-  /// aviso.
+  /// Lo que se abre al pulsar un aviso: las sugerencias del fin de semana
+  /// (aviso semanal) o la ficha de la actividad, dando por leído su aviso.
   void _openEventById(String eventId) {
     if (!mounted) return;
+    if (eventId == weekendPayload) {
+      _openWeekend();
+      return;
+    }
     ReminderInbox.markRead(eventId: eventId);
     _open(EventLinkScreen(eventId: eventId, repository: widget.repository));
   }
+
+  void _openWeekend() => _open(WeekendScreen(repository: widget.repository));
 
   void _openNotifications() =>
       _open(NotificationsScreen(repository: widget.repository));
@@ -354,6 +361,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     onTap: _openAgenda,
                   ),
                   _Shortcut(
+                    icon: Icons.weekend_outlined,
+                    label: 'Fin de semana',
+                    semanticsLabel: 'Sugerencias fin de semana',
+                    color: Brand.coralDeep,
+                    onTap: _openWeekend,
+                  ),
+                  _Shortcut(
                     icon: Icons.account_balance_outlined,
                     label: 'Monumentos',
                     color: Brand.navy,
@@ -414,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
             // Rutas
             _BlockHeader(
-              title: 'Rutas para descubrir Zaragoza',
+              title: 'Rutas culturales',
               action: 'Ver todas',
               onAction: _openRoutes,
             ),
@@ -466,11 +480,16 @@ class _Shortcut extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
+  /// Nombre completo para los lectores de pantalla, si la etiqueta visible
+  /// va abreviada.
+  final String? semanticsLabel;
+
   const _Shortcut({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
+    this.semanticsLabel,
   });
 
   @override
@@ -478,7 +497,7 @@ class _Shortcut extends StatelessWidget {
     return Expanded(
       child: Semantics(
         button: true,
-        label: label,
+        label: semanticsLabel ?? label,
         excludeSemantics: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -505,14 +524,21 @@ class _Shortcut extends StatelessWidget {
                   child: Icon(icon, color: color, size: 26),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Brand.navy,
+                // Hasta dos líneas («Fin de semana»); el alto es fijo para que
+                // todos los accesos queden alineados.
+                SizedBox(
+                  height: 30,
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: Brand.navy,
+                    ),
                   ),
                 ),
               ],

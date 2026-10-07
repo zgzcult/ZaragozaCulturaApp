@@ -120,6 +120,22 @@ void main() {
       await tester.binding.setSurfaceSize(null);
     });
 
+    testWidgets('en Favoritos no sale el aviso de origen', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'favorite_event_ids': [_event().id],
+      });
+      await tester.binding.setSurfaceSize(const Size(400, 1600));
+      await tester.pumpWidget(
+        MaterialApp(home: AgendaScreen(repository: _Repo([_event()]))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Favoritos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tus favoritos'), findsOneWidget);
+      expect(find.textContaining('Origen de los datos'), findsNothing);
+      await tester.binding.setSurfaceSize(null);
+    });
+
     testWidgets('no sale en un día sin actividades', (tester) async {
       await tester.pumpWidget(
         ZaragozaCulturaApp(repository: _Repo([_event(date: '2030-01-01')])),

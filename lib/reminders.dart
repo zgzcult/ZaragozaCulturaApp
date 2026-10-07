@@ -60,6 +60,47 @@ class ReminderPlan {
 /// Hora del día anterior a la que se envía el aviso.
 const int reminderHour = 18;
 
+// --- Aviso semanal: sugerencias para el fin de semana ----------------------
+
+/// Lo que lleva el aviso semanal para que, al pulsarlo, se abra la pantalla
+/// «Sugerencias fin de semana» (los de favoritos llevan el id de la actividad).
+const String weekendPayload = 'weekend';
+
+/// Identificador del aviso semanal (los de favoritos usan del 1 al 60).
+const int weekendReminderId = 9000;
+
+/// Hora del jueves a la que llega (una hora antes que los de favoritos, para
+/// que no coincidan).
+const int weekendReminderHour = 17;
+
+const String _weekendKey = 'weekend_reminder_enabled';
+
+/// Próximo jueves a las 17:00, estrictamente después de [now].
+DateTime nextWeekendReminder(DateTime now) {
+  var when = DateTime(now.year, now.month, now.day, weekendReminderHour);
+  while (when.weekday != DateTime.thursday || !when.isAfter(now)) {
+    when = DateTime(when.year, when.month, when.day + 1, weekendReminderHour);
+  }
+  return when;
+}
+
+/// ¿Está activado el aviso semanal del fin de semana?
+Future<bool> loadWeekendReminderEnabled() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(_weekendKey) ?? false;
+}
+
+/// Activa o desactiva el aviso semanal. Al activar pide el permiso de
+/// notificaciones. Devuelve si el cambio se pudo hacer.
+Future<bool> setWeekendReminder(bool enabled) async {
+  final service = ReminderService();
+  if (enabled && !await service.requestPermission()) return false;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_weekendKey, enabled);
+  await service.syncWeekend();
+  return true;
+}
+
 /// Máximo de avisos programados a la vez (Android limita las alarmas).
 const int maxReminders = 60;
 
@@ -274,8 +315,9 @@ class ReminderService {
       FlutterLocalNotificationsPlugin();
   static bool _ready = false;
 
-  /// Se llama con el identificador de la actividad cuando el usuario pulsa
-  /// un aviso con la app abierta o en segundo plano.
+  /// Se llama cuando el usuario pulsa un aviso con la app abierta o en
+  /// segundo plano: con el identificador de la actividad o, si es el aviso
+  /// semanal, con [weekendPayload].
   static void Function(String eventId)? onOpen;
 
   static const NotificationDetails _details = NotificationDetails(
@@ -284,6 +326,17 @@ class ReminderService {
       'Avisos de favoritos',
       channelDescription:
           'Te avisa la tarde anterior a tus actividades favoritas.',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+    ),
+  );
+
+  static const NotificationDetails _weekendDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'weekend_suggestions',
+      'Sugerencias para el fin de semana',
+      channelDescription:
+          'Cada jueves, un aviso con las sugerencias para el fin de semana.',
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
     ),
@@ -364,8 +417,50 @@ class ReminderService {
           payload: plan.eventId,
         );
       }
+      // cancelAll() también quita el aviso semanal: se vuelve a programar.
+      await syncWeekend();
     } catch (error) {
       debugPrint('REMINDERS sync error: $error');
+    }
+  }
+
+  /// Programa (o quita) el aviso de cada jueves, según lo elegido en Ajustes.
+  Future<void> syncWeekend() async {
+    try {
+      if (!await _init()) return;
+      await _plugin.cancel(id: weekendReminderId);
+      if (!await loadWeekendReminderEnabled()) return;
+      final zone = tz.getLocation('Europe/Madrid');
+      // Hora de Zaragoza «de reloj», sin zona, para calcular el jueves.
+      final madrid = tz.TZDateTime.now(zone);
+      final when = nextWeekendReminder(
+        DateTime(
+          madrid.year,
+          madrid.month,
+          madrid.day,
+          madrid.hour,
+          madrid.minute,
+        ),
+      );
+      await _plugin.zonedSchedule(
+        id: weekendReminderId,
+        title: 'Planes para el fin de semana',
+        body: 'Ya tienes tus sugerencias para el sábado y el domingo.',
+        scheduledDate: tz.TZDateTime(
+          zone,
+          when.year,
+          when.month,
+          when.day,
+          when.hour,
+        ),
+        notificationDetails: _weekendDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        // Se repite cada semana, el mismo día y a la misma hora.
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        payload: weekendPayload,
+      );
+    } catch (error) {
+      debugPrint('REMINDERS weekend error: $error');
     }
   }
 

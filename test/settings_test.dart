@@ -220,11 +220,37 @@ void main() {
     await tester.tap(find.byTooltip('Ajustes'));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
-    // Refleja que los avisos estaban activados.
+    // Los avisos están dentro de «Notificaciones» y reflejan lo guardado.
+    expect(find.text('Avisos de mis favoritos'), findsNothing);
+    await tester.tap(find.text('Notificaciones'));
+    await tester.pumpAndSettle();
     final reminders = tester.widget<SwitchListTile>(
-      find.byType(SwitchListTile).first,
+      find.widgetWithText(SwitchListTile, 'Avisos de mis favoritos'),
     );
     expect(reminders.value, isTrue);
+    expect(
+      find.widgetWithText(SwitchListTile, 'Sugerencias para el fin de semana'),
+      findsOneWidget,
+    );
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('las pastillas de privacidad y aviso legal van sin subtítulo', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 2200));
+    await tester.pumpWidget(_settings(_Location(granted: false)));
+    await tester.pumpAndSettle();
+    for (final title in ['Política de privacidad', 'Acerca de y aviso legal']) {
+      final tile = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, title),
+      );
+      expect(tile.subtitle, isNull, reason: title);
+    }
+    expect(
+      find.text('Ayúdanos a mejorar la app. No incluye datos personales.'),
+      findsOneWidget,
+    );
     await tester.binding.setSurfaceSize(null);
   });
 

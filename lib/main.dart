@@ -17,6 +17,7 @@ import 'event_submission.dart';
 import 'home.dart';
 import 'legal_notice.dart';
 import 'nearby.dart';
+import 'notification_settings.dart';
 import 'preferences.dart';
 import 'reminders.dart';
 import 'suggestion.dart';
@@ -1457,12 +1458,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
           }, childCount: items.length),
         ),
       ),
-      _reuseNoticeSliver(),
     ];
   }
 
-  /// Condiciones de reutilización de la información del Ayuntamiento, al
-  /// final de las listas de actividades.
+  /// Origen de la información del Ayuntamiento, al final de la lista de
+  /// actividades del día (no en Favoritos).
   Widget _reuseNoticeSliver() => SliverToBoxAdapter(
     child: ReuseNotice(
       service: 'Servicio de Cultura',
@@ -2922,23 +2922,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _toggleReminders(bool value) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final done = await widget.onRemindersChanged(value);
-    if (!mounted) return;
-    if (done) {
-      setState(() => _reminders = value);
-    } else {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Para recibir avisos, permite las notificaciones de la app en los ajustes del teléfono.',
-          ),
-        ),
-      );
-    }
-  }
-
   Future<void> _openUrl(String url, String errorMessage) async {
     final messenger = ScaffoldMessenger.of(context);
     var opened = false;
@@ -2978,7 +2961,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _tile({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required VoidCallback onTap,
   }) {
     return Card(
@@ -2993,7 +2976,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Icon(icon, color: Brand.navy),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle),
+        subtitle: subtitle == null ? null : Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
@@ -3030,32 +3013,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const PreferencesScreen()),
               ),
             ),
-            Card(
-              elevation: 0,
-              color: Colors.white,
-              margin: const EdgeInsets.only(bottom: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Brand.line),
-              ),
-              child: SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
+            _tile(
+              icon: Icons.notifications_active_outlined,
+              title: 'Notificaciones',
+              subtitle: 'Avisos de favoritos y sugerencias del fin de semana.',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => NotificationSettingsScreen(
+                    remindersEnabled: _reminders,
+                    onRemindersChanged: (enabled) async {
+                      final done = await widget.onRemindersChanged(enabled);
+                      if (done) _reminders = enabled;
+                      return done;
+                    },
+                  ),
                 ),
-                secondary: const Icon(
-                  Icons.notifications_active_outlined,
-                  color: Brand.navy,
-                ),
-                title: const Text(
-                  'Avisos de mis favoritos',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                subtitle: const Text(
-                  'Te avisamos la tarde anterior (18:00) de cada actividad que hayas guardado.',
-                ),
-                value: _reminders,
-                onChanged: _toggleReminders,
               ),
             ),
             Card(
@@ -3114,7 +3087,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: const Text(
-                  'Si la app falla, nos llega un informe técnico para corregirlo. No incluye datos personales.',
+                  'Ayúdanos a mejorar la app. No incluye datos personales.',
                 ),
                 value: _crashReports,
                 onChanged: (value) {
@@ -3132,7 +3105,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tile(
               icon: Icons.privacy_tip_outlined,
               title: 'Política de privacidad',
-              subtitle: 'Qué datos usa la aplicación y con quién se conecta.',
               onTap: () => _openUrl(
                 _privacyUrl,
                 'No se pudo abrir la política de privacidad.',
@@ -3141,7 +3113,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _tile(
               icon: Icons.info_outline,
               title: 'Acerca de y aviso legal',
-              subtitle: 'Origen de los datos, imágenes y condiciones.',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const AboutScreen()),

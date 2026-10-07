@@ -262,7 +262,8 @@ Uri? routeMapsLink(List<ResolvedStop> stops) {
 // Interfaz
 // ---------------------------------------------------------------------------
 
-/// Pantalla de rutas: una tarjeta por ruta.
+/// Pantalla de rutas, en dos pestañas: las culturales (una tarjeta por
+/// ruta) y las naturales (todavía sin contenido).
 class RoutesScreen extends StatefulWidget {
   final MonumentsRepository repository;
 
@@ -347,10 +348,26 @@ class _RoutesScreenState extends State<RoutesScreen> {
         ],
       );
     }
-    return Scaffold(
-      backgroundColor: Brand.cream,
-      appBar: AppBar(title: const Text('Rutas')),
-      body: body,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: Brand.cream,
+        appBar: AppBar(
+          title: const Text('Rutas'),
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Brand.coral,
+            indicatorWeight: 3,
+            labelStyle: TextStyle(fontWeight: FontWeight.w700),
+            tabs: [
+              Tab(text: 'Rutas culturales'),
+              Tab(text: 'Rutas naturales'),
+            ],
+          ),
+        ),
+        body: TabBarView(children: [body, const _NaturalRoutesSoon()]),
+      ),
     );
   }
 
@@ -385,7 +402,43 @@ class _RoutesScreenState extends State<RoutesScreen> {
   }
 }
 
-/// Carrusel de rutas para la portada.
+/// Pestaña de rutas naturales: aún no hay contenido.
+class _NaturalRoutesSoon extends StatelessWidget {
+  const _NaturalRoutesSoon();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.park_outlined, size: 48, color: Color(0xFF9AA8B8)),
+            SizedBox(height: 12),
+            Text(
+              'Muy pronto',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Brand.navy,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Estamos preparando rutas a pie por los entornos naturales de '
+              'Zaragoza.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Brand.slate, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Carrusel de rutas culturales para la portada.
 class RoutesCarousel extends StatelessWidget {
   final List<Monument> monuments;
   final double height;

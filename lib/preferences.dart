@@ -103,9 +103,8 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
           children: [
             const Text(
-              'Toca los tipos de actividad que más te gustan, empezando por '
-              'tu favorito. El número indica su prioridad: te los '
-              'recomendaremos primero y aparecerán antes en los filtros.',
+              'Selecciona tus intereses favoritos para darles prioridad en '
+              'las recomendaciones.',
               style: TextStyle(
                 fontSize: 15,
                 height: 1.45,
@@ -132,7 +131,7 @@ class _PreferencesScreenState extends State<PreferencesScreen> {
               ),
             const SizedBox(height: 10),
             const Text(
-              'Tus preferencias se guardan solo en tu móvil.',
+              'Tus preferencias se guardarán exclusivamente en tu dispositivo.',
               style: TextStyle(fontSize: 12, color: Brand.slate),
             ),
           ],

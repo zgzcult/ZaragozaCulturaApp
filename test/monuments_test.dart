@@ -246,6 +246,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Rutas'), findsOneWidget); // título de la pantalla
+      expect(find.text('Rutas culturales'), findsOneWidget);
+      expect(find.text('Rutas naturales'), findsOneWidget);
       for (final title in [
         'Zaragoza romana',
         'Mudéjar Patrimonio Mundial',
@@ -258,6 +260,19 @@ void main() {
       await tester.tap(find.text('Zaragoza romana'));
       await tester.pumpAndSettle();
       expect(find.byType(RouteDetailScreen), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    testWidgets('las rutas naturales aún no tienen contenido', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(400, 1400));
+      await tester.pumpWidget(
+        MaterialApp(home: RoutesScreen(repository: _FakeRepository(monuments))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rutas naturales'));
+      await tester.pumpAndSettle();
+      expect(find.text('Muy pronto'), findsOneWidget);
+      expect(find.text('Zaragoza romana'), findsNothing);
       await tester.binding.setSurfaceSize(null);
     });
 

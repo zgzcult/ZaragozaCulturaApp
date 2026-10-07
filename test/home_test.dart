@@ -117,7 +117,13 @@ void main() {
     expect(find.text('Buenas tardes,\nmañ@'), findsOneWidget);
     expect(find.text('VIERNES 2 DE OCTUBRE · 17°'), findsOneWidget);
     expect(find.byTooltip('Ajustes'), findsOneWidget);
-    for (final label in ['Agenda', 'Monumentos', 'Rutas', 'Servicios']) {
+    for (final label in [
+      'Agenda',
+      'Fin de semana',
+      'Monumentos',
+      'Rutas',
+      'Servicios',
+    ]) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(find.text('Para hoy'), findsNothing);
@@ -128,7 +134,7 @@ void main() {
     expect(find.text('Ahora'), findsOneWidget);
     expect(find.text('21:00'), findsOneWidget);
 
-    expect(find.text('Rutas para descubrir Zaragoza'), findsOneWidget);
+    expect(find.text('Rutas culturales'), findsOneWidget);
     expect(find.text('Zaragoza romana'), findsOneWidget);
 
     // Solo los imprescindibles.
