@@ -51,5 +51,64 @@ class FreeTests(unittest.TestCase):
         self.assertTrue(all(e["free"] is False for e in scraper.dataset_event_occurrences(source, limit=5)))
 
 
+def activity(**extra):
+    from datetime import datetime, timedelta
+
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
+    return {
+        "id": 7,
+        "title": "Ofrenda subacuática",
+        "startDate": tomorrow,
+        "endDate": tomorrow,
+        "subEvent": [{"id": 1, "location": {"id": 6011, "title": "Acuario"}}],
+        **extra,
+    }
+
+
+FICHA = "https://www.zaragoza.es/sede/servicio/cultura/evento/7"
+
+
+class VenueWebsiteTests(unittest.TestCase):
+    def links(self, source, records):
+        calls = []
+
+        def load(venue_id):
+            calls.append(venue_id)
+            return records[venue_id]
+
+        lookup = scraper.VenueWebsites(load)
+        events = scraper.dataset_event_occurrences(source, limit=5, venue_website=lookup)
+        events += scraper.dataset_event_occurrences(source, limit=5, venue_website=lookup)
+        return {e["moreInfoUrl"] for e in events}, calls
+
+    def test_sin_enlace_propio_va_a_la_web_del_lugar(self):
+        links, calls = self.links(activity(), {"6011": {"url": "http://www.acuariodezaragoza.com/"}})
+        self.assertEqual(links, {"http://www.acuariodezaragoza.com/"})
+        self.assertEqual(calls, ["6011"])  # una sola consulta por lugar
+
+    def test_el_enlace_propio_de_la_actividad_manda(self):
+        source = activity(moreInfoUrl="https://entradas.example.org/ofrenda")
+        links, calls = self.links(source, {"6011": {"url": "http://www.acuariodezaragoza.com/"}})
+        self.assertEqual(links, {"https://entradas.example.org/ofrenda"})
+        self.assertEqual(calls, [])
+
+    def test_lugar_municipal_o_sin_web_se_queda_en_la_ficha(self):
+        for record in ({}, {"url": ""}, {"url": "https://www.zaragoza.es/sede/portal/museos/"}, {"url": "no es una web"}):
+            links, _ = self.links(activity(), {"6011": record})
+            self.assertEqual(links, {FICHA}, record)
+
+    def test_si_la_consulta_falla_se_queda_en_la_ficha(self):
+        def broken(_venue_id):
+            raise ValueError("respuesta rota")
+
+        events = scraper.dataset_event_occurrences(activity(), limit=5, venue_website=scraper.VenueWebsites(broken))
+        self.assertEqual({e["moreInfoUrl"] for e in events}, {FICHA})
+
+    def test_web_sin_protocolo(self):
+        self.assertEqual(scraper.external_url("www.teatro.example.com"), "https://www.teatro.example.com")
+        self.assertEqual(scraper.external_url("https://museos.zaragoza.es/x"), "")
+        self.assertEqual(scraper.external_url(None), "")
+
+
 if __name__ == "__main__":
     unittest.main()

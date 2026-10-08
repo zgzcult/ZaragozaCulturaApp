@@ -143,6 +143,54 @@ def fetch(url: str, timeout: int = 25) -> str:
         return body
 
 
+VENUE_URL = "https://www.zaragoza.es/sede/servicio/equipamiento/{id}.json"
+
+
+def is_council_url(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host == "zaragoza.es" or host.endswith(".zaragoza.es")
+
+
+def external_url(value: Any) -> str:
+    """La dirección si es una web ajena al Ayuntamiento; si no, ""."""
+    url = normalize_text(value)
+    if url and not re.match(r"https?://", url, re.I):
+        url = "https://" + url
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or "." not in (parsed.hostname or ""):
+        return ""
+    return "" if is_council_url(url) else url
+
+
+class VenueWebsites:
+    """Web propia de cada lugar de realización, según su ficha de
+    equipamiento. Se pregunta una sola vez por lugar en cada ejecución."""
+
+    def __init__(self, load=None):
+        self._load = load or self._download
+        self._known: Dict[str, str] = {}
+
+    @staticmethod
+    def _download(venue_id: str) -> Dict[str, Any]:
+        req = Request(VENUE_URL.format(id=venue_id), headers={
+            "User-Agent": "ZaragozaCulturaApp/1.0",
+            "Accept": "application/json",
+        })
+        with urlopen(req, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def __call__(self, location: Any) -> str:
+        venue_id = str(location.get("id") or "") if isinstance(location, dict) else ""
+        if not venue_id.isdigit():
+            return ""
+        if venue_id not in self._known:
+            try:
+                self._known[venue_id] = external_url(self._load(venue_id).get("url"))
+            except (HTTPError, URLError, TimeoutError, ValueError, AttributeError):
+                self._known[venue_id] = ""
+        return self._known[venue_id]
+
+
 def fetch_json(url: str, payload: Dict[str, Any], timeout: int = 40) -> Dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     req = Request(url, data=body, headers={
@@ -403,7 +451,12 @@ def is_free(source: Dict[str, Any]) -> bool:
     return True
 
 
-def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Optional[set[str]] = None) -> List[Dict[str, Any]]:
+def dataset_event_occurrences(
+    source: Dict[str, Any],
+    limit: int,
+    public_ids: Optional[set[str]] = None,
+    venue_website=None,
+) -> List[Dict[str, Any]]:
     source_id = str(source.get("id", ""))
     if public_ids is not None and source_id not in public_ids:
         return []
@@ -440,6 +493,11 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
         location = sub_event.get("location") or {}
         place = normalize_text(location.get("title") if isinstance(location, dict) else location) or normalize_text(source.get("location"))
         coords = coordinates_of(location) or coordinates_of(source)
+        # Si la actividad no tiene enlace propio y se celebra en un lugar con
+        # web (un teatro o una sala privados), «Más información» lleva allí.
+        info_url = more_info_url
+        if venue_website and is_council_url(more_info_url):
+            info_url = venue_website(location) or more_info_url
         hours_by_day: Dict[int, List[Dict[str, Any]]] = {}
         for opening in sub_event.get("openingHours", []):
             if not isinstance(opening, dict):
@@ -470,7 +528,7 @@ def dataset_event_occurrences(source: Dict[str, Any], limit: int, public_ids: Op
                     "place": place,
                     "address": normalize_text(location.get("streetAddress")) if isinstance(location, dict) else "",
                     "officialUrl": official_url,
-                    "moreInfoUrl": more_info_url,
+                    "moreInfoUrl": info_url,
                     "officialWebsite": normalize_text(source.get("url")),
                     "imageUrl": normalize_text(source.get("image")),
                     "source": "ayuntamiento",
@@ -583,13 +641,14 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
             public_ids = None
             print(f"[WARN] No se pudo verificar el calendario público, se usara el dataset sin filtrar: {exc}", file=sys.stderr)
         public_sources = fetch_dataset(from_date, to_date)
+        venue_website = VenueWebsites()
         for source in public_sources:
             try:
                 detail_html = fetch(source.get("alt") or "")
                 source["moreInfoUrl"] = extract_more_info_url(detail_html, source.get("alt") or "")
             except (HTTPError, URLError, TimeoutError, ValueError):
                 source["moreInfoUrl"] = source.get("alt") or ""
-            dataset_events.extend(dataset_event_occurrences(source, limit, public_ids))
+            dataset_events.extend(dataset_event_occurrences(source, limit, public_ids, venue_website))
         dataset_events.sort(key=lambda event: (event["date"], event["time"], event["title"]))
         if dataset_events:
             return dataset_events[:limit]
