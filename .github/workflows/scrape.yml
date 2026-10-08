@@ -48,18 +48,22 @@ jobs:
             if (-not (Get-ChildItem $dir -Filter "pendientes_*.json")) { exit 0 }
             $claude = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
             if (-not (Test-Path $claude)) { $claude = "claude" }
-            $prompt = Get-Content backend/rewrite_prompt.md -Raw -Encoding UTF8
+            # Las instrucciones van en un fichero: pasadas como argumento,
+            # PowerShell las corta en la primera comilla.
+            Copy-Item backend/rewrite_prompt.md (Join-Path $dir "INSTRUCCIONES.md")
             Push-Location -LiteralPath $dir
-            & $claude -p $prompt --allowedTools "Read" "Write" "Glob" --max-turns 80
+            & $claude -p "Lee el fichero INSTRUCCIONES.md de esta carpeta y haz exactamente lo que indica." --allowedTools "Read" "Write" "Glob" --max-turns 80
             Pop-Location
+            # La carpeta de trabajo la creo otra cuenta de Windows; sin esto git se niega.
+            $git = @("-c", "safe.directory=*")
             python backend/rewrites_tool.py apply $dir
             python backend/test_rewrites.py
-            if ($LASTEXITCODE -ne 0) { git checkout -- backend/rewrites.json; exit 1 }
-            git add backend/rewrites.json
-            git diff --cached --quiet
+            if ($LASTEXITCODE -ne 0) { git @git checkout -- backend/rewrites.json; exit 1 }
+            git @git add backend/rewrites.json
+            git @git diff --cached --quiet
             if ($LASTEXITCODE -eq 0) { exit 0 }
-            git -c user.name="Jesus" -c user.email="actions@users.noreply.github.com" commit -m "Descripciones propias: textos nuevos" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-            git push origin HEAD:main
+            git @git -c user.name="Jesus" -c user.email="actions@users.noreply.github.com" commit -m "Descripciones propias: textos nuevos" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git @git push origin HEAD:main
         # Monumentos y museos (datos abiertos del Ayuntamiento) para la app.
         - run: python backend/scraper/places.py
           continue-on-error: true
