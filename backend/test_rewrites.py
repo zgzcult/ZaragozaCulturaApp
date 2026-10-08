@@ -118,5 +118,52 @@ class LoadTest(unittest.TestCase):
             self.assertGreater(len(text), 20, key)
 
 
+class ApplyTest(unittest.TestCase):
+    """La ejecución automática solo acepta lo que estaba pendiente."""
+
+    def setUp(self):
+        import json
+
+        import rewrites_tool
+
+        self.tool = rewrites_tool
+        self.folder = tempfile.TemporaryDirectory()
+        self.dir = Path(self.folder.name)
+        self.saved = rewrites.PATH
+        rewrites.PATH = self.dir / "rewrites.json"
+        rewrites.PATH.write_text('{"aaaaaaaaaaaaaaaa": "Texto que ya estaba."}', encoding="utf-8")
+        pending = [{"key": KEY, "title": "t", "category": "c", "description": ORIGINAL}]
+        (self.dir / "pendientes_01.json").write_text(json.dumps(pending), encoding="utf-8")
+
+    def tearDown(self):
+        rewrites.PATH = self.saved
+        self.folder.cleanup()
+
+    def apply(self, done):
+        import json
+
+        (self.dir / "hecho_01.json").write_text(json.dumps(done), encoding="utf-8")
+        self.assertEqual(self.tool.cmd_apply([str(self.dir)]), 0)
+        return rewrites.load()
+
+    def test_acepta_lo_pendiente(self):
+        data = self.apply({KEY: "Texto  propio."})
+        self.assertEqual(data[KEY], "Texto propio.")
+        self.assertEqual(data["aaaaaaaaaaaaaaaa"], "Texto que ya estaba.")
+
+    def test_rechaza_huellas_que_no_estaban_pendientes(self):
+        data = self.apply({"aaaaaaaaaaaaaaaa": "Cambiado.", "bbbbbbbbbbbbbbbb": "Colado."})
+        self.assertEqual(data, {"aaaaaaaaaaaaaaaa": "Texto que ya estaba."})
+
+    def test_rechaza_vacios_copias_y_textos_inflados(self):
+        for bad in ("", "  ", 7, ORIGINAL, "x" * 2000):
+            self.assertNotIn(KEY, self.apply({KEY: bad}), repr(bad)[:20])
+
+    def test_un_fichero_roto_no_estropea_nada(self):
+        (self.dir / "hecho_01.json").write_text("{roto", encoding="utf-8")
+        self.assertEqual(self.tool.cmd_apply([str(self.dir)]), 0)
+        self.assertEqual(rewrites.load(), {"aaaaaaaaaaaaaaaa": "Texto que ya estaba."})
+
+
 if __name__ == "__main__":
     unittest.main()

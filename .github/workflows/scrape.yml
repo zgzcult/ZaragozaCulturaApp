@@ -5,6 +5,9 @@ on:
       - cron: '0 12 */2 * *' # Se ejecuta cada 2 dias a las 12:00 UTC
     workflow_dispatch: {} # Tambien se puede lanzar a mano cuando quieras
 
+permissions:
+    contents: write # el paso de descripciones sube backend/rewrites.json
+
 jobs:
     scrape:
       # zaragoza.es bloquea las IPs de los runners cloud de GitHub, así que
@@ -32,6 +35,31 @@ jobs:
             MONGODB_URI: ${{ secrets.MONGODB_URI }}
             GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
             PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        # Descripciones propias: Claude Code (instalado en este PC, con la
+        # sesión de Jesús) reescribe las de las actividades nuevas. Solo puede
+        # leer y escribir en una carpeta temporal; unir, comprobar y subir lo
+        # hacen los pasos normales. Si falla, la tarea programada lo reintenta.
+        - name: Descripciones propias
+          continue-on-error: true
+          shell: powershell
+          run: |
+            $dir = Join-Path $env:RUNNER_TEMP "rewrites"
+            python backend/rewrites_tool.py pending $dir
+            if (-not (Get-ChildItem $dir -Filter "pendientes_*.json")) { exit 0 }
+            $claude = Join-Path $env:USERPROFILE ".local\bin\claude.exe"
+            if (-not (Test-Path $claude)) { $claude = "claude" }
+            $prompt = Get-Content backend/rewrite_prompt.md -Raw -Encoding UTF8
+            Push-Location -LiteralPath $dir
+            & $claude -p $prompt --allowedTools "Read" "Write" "Glob" --max-turns 80
+            Pop-Location
+            python backend/rewrites_tool.py apply $dir
+            python backend/test_rewrites.py
+            if ($LASTEXITCODE -ne 0) { git checkout -- backend/rewrites.json; exit 1 }
+            git add backend/rewrites.json
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            git -c user.name="Jesus" -c user.email="actions@users.noreply.github.com" commit -m "Descripciones propias: textos nuevos" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+            git push origin HEAD:main
         # Monumentos y museos (datos abiertos del Ayuntamiento) para la app.
         - run: python backend/scraper/places.py
           continue-on-error: true

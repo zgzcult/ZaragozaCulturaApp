@@ -30,9 +30,9 @@ def text_key(description: Any) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16] if text else ""
 
 
-def load(path: Path = PATH) -> Dict[str, str]:
+def load(path: Optional[Path] = None) -> Dict[str, str]:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads((path or PATH).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return {k: v for k, v in data.items() if isinstance(v, str) and v.strip()}
