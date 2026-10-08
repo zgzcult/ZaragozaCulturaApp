@@ -23,6 +23,7 @@ from pymongo import MongoClient
 
 import crashes
 import event_links
+import rewrites
 import services
 import submissions
 import weather
@@ -33,6 +34,9 @@ MONGODB_URI = os.environ.get("MONGODB_URI")
 DEFAULT_DAYS = 50  # la app muestra 45 días; margen extra
 CACHE_SECONDS = 300
 _cache = {}
+
+# Descripciones propias; cambian con cada despliegue.
+REWRITES = rewrites.load()
 
 
 def get_events_from_db(days=None):
@@ -126,7 +130,7 @@ def get_payload(days):
     hit = _cache.get(days)
     if hit and time.time() - hit[0] < CACHE_SECONDS:
         return hit[1]
-    events = get_events_from_db(days)
+    events = rewrites.publish(get_events_from_db(days), REWRITES)
     payload = json.dumps(events, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     _cache[days] = (time.time(), payload)
     return payload
@@ -239,6 +243,8 @@ class EventHandler(BaseHTTPRequestHandler):
             # Enlace de una actividad compartida desde la app.
             event_id = url.path[len("/app/evento/"):].strip("/")
             event = event_links.find_event(event_id)
+            if event:
+                event = rewrites.with_own_text(event, REWRITES)
             page = event_links.render_event_page(
                 event_id, event, os.environ.get("APP_STORE_URL", "").strip()
             ).encode("utf-8")
@@ -325,6 +331,25 @@ class EventHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+
+        if url.path == "/rewrites/pending":
+            # Para la herramienta que mantiene las descripciones propias.
+            try:
+                events = get_events_from_db()
+                data = {
+                    "pending": rewrites.pending(events, REWRITES),
+                    "live": rewrites.live_keys(events),
+                }
+                payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                self.send_response(200)
+            except Exception as exc:
+                payload = json.dumps({"error": str(exc)}).encode("utf-8")
+                self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
             return
 
         if url.path in ("/events", "/events.json"):

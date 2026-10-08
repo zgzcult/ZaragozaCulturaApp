@@ -2406,24 +2406,26 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Descripción',
-                    style: TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      color: Brand.navy,
+                  if (event.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Descripción',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        color: Brand.navy,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    event.description,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.6,
-                      color: Color(0xFF425B71),
+                    const SizedBox(height: 10),
+                    Text(
+                      event.description,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.6,
+                        color: Color(0xFF425B71),
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,

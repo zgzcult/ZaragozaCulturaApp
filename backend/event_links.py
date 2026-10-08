@@ -39,7 +39,7 @@ def find_event(event_id: str) -> Optional[Dict[str, Any]]:
         from pymongo import MongoClient
 
         client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-        fields = {"_id": 0, "title": 1, "date": 1, "time": 1, "place": 1, "description": 1, "imageUrl": 1}
+        fields = {"_id": 0, "title": 1, "date": 1, "time": 1, "place": 1, "description": 1, "imageUrl": 1, "source": 1}
         event = client["zaragoza_cultura"]["events"].find_one({"id": event_id}, fields)
         client.close()
         return event
