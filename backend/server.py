@@ -23,6 +23,7 @@ from pymongo import MongoClient
 
 import crashes
 import event_links
+import link_overrides
 import rewrites
 import services
 import submissions
@@ -37,6 +38,8 @@ _cache = {}
 
 # Descripciones propias; cambian con cada despliegue.
 REWRITES = rewrites.load()
+# Enlaces corregidos a mano; también cambian con cada despliegue.
+LINKS = link_overrides.load()
 
 
 def get_events_from_db(days=None):
@@ -130,7 +133,7 @@ def get_payload(days):
     hit = _cache.get(days)
     if hit and time.time() - hit[0] < CACHE_SECONDS:
         return hit[1]
-    events = rewrites.publish(get_events_from_db(days), REWRITES)
+    events = link_overrides.apply(rewrites.publish(get_events_from_db(days), REWRITES), LINKS)
     payload = json.dumps(events, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     _cache[days] = (time.time(), payload)
     return payload

@@ -649,6 +649,15 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
             except (HTTPError, URLError, TimeoutError, ValueError):
                 source["moreInfoUrl"] = source.get("alt") or ""
             dataset_events.extend(dataset_event_occurrences(source, limit, public_ids, venue_website))
+        # Enlace a la página propia del acto en la web de cada lugar apuntado
+        # en venue_agendas.json. Si falla, se quedan los enlaces que había.
+        try:
+            import venue_links
+
+            exact = venue_links.apply(dataset_events)
+            print(f"[OK] {exact} sesiones enlazan a la página de su acto en la web del lugar", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 - es una mejora, no puede tumbar la descarga
+            print(f"[WARN] No se pudieron afinar los enlaces de los lugares: {exc}", file=sys.stderr)
         dataset_events.sort(key=lambda event: (event["date"], event["time"], event["title"]))
         if dataset_events:
             return dataset_events[:limit]

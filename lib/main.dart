@@ -219,6 +219,9 @@ class CulturalEvent {
   final String runStart;
   final String runEnd;
 
+  /// La actividad no lleva enlace: no se enseña «Más información».
+  final bool hideLink;
+
   /// Coordenadas del lugar (para "Cerca de mí"); null si no se conocen.
   final double? lat;
   final double? lng;
@@ -246,6 +249,7 @@ class CulturalEvent {
     this.updatedAt = '',
     this.source = 'ayuntamiento',
     this.free = false,
+    this.hideLink = false,
     this.runStart = '',
     this.runEnd = '',
     this.lat,
@@ -288,6 +292,7 @@ class CulturalEvent {
       updatedAt: (json['lastUpdated'] ?? '').toString().split('T').first,
       source: (json['source'] ?? 'ayuntamiento').toString(),
       free: json['free'] == true,
+      hideLink: json['hideLink'] == true,
       runStart: (json['runStartDate'] ?? '').toString(),
       runEnd: (json['runEndDate'] ?? '').toString(),
       lat: (json['lat'] as num?)?.toDouble(),
@@ -331,6 +336,7 @@ class CulturalEvent {
       updatedAt: updatedAt,
       source: source,
       free: free,
+      hideLink: hideLink,
       runStart: start ?? runStart,
       runEnd: end ?? runEnd,
       lat: lat,
@@ -2224,7 +2230,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       final added = await calendar.Add2Calendar.addEvent2Cal(
         calendar.Event(
           title: event.title,
-          description: 'Más información: ${event.officialUrl}',
+          description: event.hideLink
+              ? ''
+              : 'Más información: ${moreInfoTarget(event)}',
           location: '${event.place}$address',
           startDate: window.start,
           endDate: window.end,
@@ -2426,29 +2434,31 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _openMoreInfo,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Brand.navy,
-                        side: const BorderSide(color: Brand.navy),
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                  if (!event.hideLink) ...[
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _openMoreInfo,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Brand.navy,
+                          side: const BorderSide(color: Brand.navy),
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.language_rounded),
-                      label: const Text(
-                        'Más información',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                        icon: const Icon(Icons.language_rounded),
+                        label: const Text(
+                          'Más información',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                   // Origen de los datos: solo en las actividades que se
                   // extraen de la agenda del Ayuntamiento, con la fecha de su
                   // última actualización.

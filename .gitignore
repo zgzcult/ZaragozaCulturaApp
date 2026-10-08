@@ -16,3 +16,6 @@ backend/data/*.json
 !backend/data/zaragoza_events.sample.json
 .DS_Store
 Thumbs.db
+
+# Hojas de revisión de enlaces (trabajo local)
+revision/

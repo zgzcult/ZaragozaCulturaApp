@@ -1,0 +1,53 @@
+{
+  "links": {
+    "305440": "https://museos-cultura.zaragoza.es/info-visita-comentada-evergetismo-e-influencia-mujeres-que-transformaron-la-ciudad-romana-2/",
+    "308160": "https://zaragozadeporte.com/Evento.asp?id=7205",
+    "308163": "https://zaragozadeporte.com/Evento.asp?id=7157",
+    "308165": "https://zaragozadeporte.com/Evento.asp?id=7191",
+    "308306": "https://auditoriozaragoza.com/programacion/el-lago-de-los-cisnes-10/",
+    "308526": "https://www.grandesvinos.com/blog/catas-vino-hoteles-zaragoza-2026/",
+    "310532": "https://teatrodelmercadozaragoza.com/zaragoza-improvisa-2026/",
+    "312378": "https://teatroprincipalzaragoza.com/la-comedia-de-la-olla/",
+    "312386": "https://teatrodelmercadozaragoza.com/la-maquina-del-tiempo/",
+    "312387": "https://teatrodelmercadozaragoza.com/sobras-completas-del-quijote/",
+    "312388": "https://teatrodelmercadozaragoza.com/linea-de-fondo/",
+    "312389": "https://teatrodelmercadozaragoza.com/y-si-me-pasara-a-mi/",
+    "312392": "https://teatrodelmercadozaragoza.com/la-verdadera-receta-de-navidad/",
+    "312398": "https://teatroprincipalzaragoza.com/dulcinea/",
+    "312399": "https://teatroprincipalzaragoza.com/los-magnificos/",
+    "312401": "https://teatroprincipalzaragoza.com/largo-viaje-hacia-la-noche/",
+    "312406": "https://teatroprincipalzaragoza.com/vi-festival-de-magia-ciudad-de-zaragoza/",
+    "312407": "https://teatroprincipalzaragoza.com/goya-y-la-jota-eterna/",
+    "312409": "https://teatroprincipalzaragoza.com/el-hijo-de-la-comica/",
+    "314071": "https://www.teatrodelasesquinas.com/es/programacion/c/869-el-funeral.html",
+    "314263": "https://www.instagram.com/harinerazgz/",
+    "314274": "https://www.teadiraragon.com/disco-disco-teadir-aragon-fundacion-nudos/",
+    "314756": "https://www.cortesaragon.es/index.php?id=3269",
+    "314774": "https://cultura.unizar.es/actividades/exposicion-paula-ortiz-int-noche-ext-dia",
+    "314784": "https://cultura.unizar.es/actividades/exposicion-conspiranoia-narrativas-del-complot",
+    "314877": "https://iaacc.es/events/observatorio-2026-equivalencias/?occurrence=2026-06-09",
+    "314888": "https://iaacc.es/events/archivo-portera/?occurrence=2026-02-24",
+    "314892": "https://iaacc.es/events/aragon-y-las-artes-1976-1995/?occurrence=2025-12-11",
+    "314902": "https://iaacc.es/events/visiones-transversales-en-torno-a-circa-xx-miradas/?occurrence=2025-09-06",
+    "314926": "https://iaacc.es/exposiciones-actuales/",
+    "314927": "https://iaacc.es/events/vuestra-obra-circa-xx/?occurrence=2026-06-12"
+  },
+  "no_link": [
+    "313804",
+    "313892",
+    "314255"
+  ],
+  "blocked_hosts": [
+    "lasarmas.es",
+    "zaragoza.es"
+  ],
+  "hidden": [
+    "311855"
+  ],
+  "pending": [
+    "304387",
+    "305442",
+    "312405",
+    "312693"
+  ]
+}

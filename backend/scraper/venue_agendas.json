@@ -1,0 +1,40 @@
+[
+  {
+    "place": "creedence",
+    "agenda": "https://creedencesound.com/sala-creedence-conciertos-y-sesiones",
+    "events": "/agenda_creedence/",
+    "hosts": ["creedence.es"]
+  },
+  {
+    "place": "auditorio de zaragoza",
+    "agenda": "https://auditoriozaragoza.com/agenda/",
+    "events": "/programacion/"
+  },
+  {
+    "place": "caixaforum",
+    "agenda": "https://caixaforum.org/es/zaragoza/actividades",
+    "pages": [
+      "https://caixaforum.org/es/zaragoza/actividades?p=15",
+      "https://caixaforum.org/es/zaragoza/exposiciones"
+    ],
+    "events": "/es/zaragoza/p/",
+    "hosts": ["caixaforum.es"],
+    "browser": true
+  },
+  {
+    "place": "sala oasis",
+    "agenda": "https://www.salaoasis.com/agenda-oasis/",
+    "events": "/events/",
+    "hosts": ["oasisclubteatro.com"],
+    "browser": true
+  },
+  {
+    "place": "sala zeta",
+    "agenda": "https://www.instagram.com/sala_z_/",
+    "hosts": ["salazeta.com"]
+  },
+  {
+    "place": "harinera",
+    "agenda": "https://www.instagram.com/harinerazgz/"
+  }
+]
