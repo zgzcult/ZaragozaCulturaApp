@@ -41,7 +41,7 @@ def cmd_pending(args: list) -> int:
     bootstrap = "--bootstrap" in args
     target = Path([a for a in args if not a.startswith("--")][0])
     if bootstrap:
-        items = rewrites.pending(_get("/events?all"), rewrites.load())
+        items = rewrites.pending(_get("/events?all=1"), rewrites.load())
     else:
         items = _get("/rewrites/pending")["pending"]
     target.mkdir(parents=True, exist_ok=True)
