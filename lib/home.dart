@@ -169,23 +169,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _openNotifications() =>
       _open(NotificationsScreen(repository: widget.repository));
 
-  /// Usa lo guardado en el teléfono; solo descarga si no hay nada.
+  /// Última vez que la portada pidió la agenda al servidor.
+  DateTime? _refreshedAt;
+
+  /// Enseña al momento lo guardado en el teléfono y después lo renueva con
+  /// el servidor (como mucho cada diez minutos), para no quedarse con datos
+  /// antiguos.
   Future<void> _loadSuggestions() async {
     final favorites = await _favoritesStorage.load();
     final preferred = await CategoryPreferences.load();
-    var events = await widget.repository.loadCached();
-    if (events.isEmpty) events = await widget.repository.fetchFresh() ?? [];
-    if (!mounted) return;
-    setState(() {
-      _favorites
-        ..clear()
-        ..addAll(favorites);
-      _suggestions = pickDaySuggestions(
-        events,
-        now: widget.clock(),
-        preferred: preferred,
-      );
-    });
+    void show(List<CulturalEvent> events) {
+      if (!mounted) return;
+      setState(() {
+        _favorites
+          ..clear()
+          ..addAll(favorites);
+        _suggestions = pickDaySuggestions(
+          events,
+          now: widget.clock(),
+          preferred: preferred,
+        );
+      });
+    }
+
+    final cached = await widget.repository.loadCached();
+    if (cached.isNotEmpty) show(cached);
+    final now = DateTime.now();
+    final recent =
+        _refreshedAt != null &&
+        now.difference(_refreshedAt!) < const Duration(minutes: 10);
+    if (cached.isNotEmpty && recent) return;
+    final fresh = await widget.repository.fetchFresh();
+    if (fresh != null) _refreshedAt = now;
+    if (fresh != null || cached.isEmpty) show(fresh ?? const []);
   }
 
   Future<void> _loadMonuments() async {
