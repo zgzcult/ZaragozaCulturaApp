@@ -22,15 +22,7 @@
     "314263": "https://www.instagram.com/harinerazgz/",
     "314274": "https://www.teadiraragon.com/disco-disco-teadir-aragon-fundacion-nudos/",
     "314569": "https://www.feriazaragoza.es/evento/fantasma-la-opera-2026",
-    "314756": "https://www.cortesaragon.es/index.php?id=3269",
-    "314774": "https://cultura.unizar.es/actividades/exposicion-paula-ortiz-int-noche-ext-dia",
-    "314784": "https://cultura.unizar.es/actividades/exposicion-conspiranoia-narrativas-del-complot",
-    "314877": "https://iaacc.es/events/observatorio-2026-equivalencias/?occurrence=2026-06-09",
-    "314888": "https://iaacc.es/events/archivo-portera/?occurrence=2026-02-24",
-    "314892": "https://iaacc.es/events/aragon-y-las-artes-1976-1995/?occurrence=2025-12-11",
-    "314902": "https://iaacc.es/events/visiones-transversales-en-torno-a-circa-xx-miradas/?occurrence=2025-09-06",
-    "314926": "https://iaacc.es/exposiciones-actuales/",
-    "314927": "https://iaacc.es/events/vuestra-obra-circa-xx/?occurrence=2026-06-12"
+    "314756": "https://www.cortesaragon.es/index.php?id=3269"
   },
   "no_link": [
     "313804",
@@ -38,7 +30,17 @@
     "314255"
   ],
   "blocked_hosts": [
+    "caixaforum.es",
+    "caixaforum.org",
+    "cultura.unizar.es",
+    "fonamad.org",
+    "fundacionlacaixa.org",
+    "gozarte.net",
+    "iaacc.es",
     "lasarmas.es",
+    "redescena.net",
+    "teatroarbole.es",
+    "unizar.es",
     "zaragoza.es"
   ],
   "home_only": {
@@ -52,5 +54,15 @@
     "305442",
     "312405",
     "312693"
-  ]
+  ],
+  "parked": {
+    "314774": "https://cultura.unizar.es/actividades/exposicion-paula-ortiz-int-noche-ext-dia",
+    "314784": "https://cultura.unizar.es/actividades/exposicion-conspiranoia-narrativas-del-complot",
+    "314877": "https://iaacc.es/events/observatorio-2026-equivalencias/?occurrence=2026-06-09",
+    "314888": "https://iaacc.es/events/archivo-portera/?occurrence=2026-02-24",
+    "314892": "https://iaacc.es/events/aragon-y-las-artes-1976-1995/?occurrence=2025-12-11",
+    "314902": "https://iaacc.es/events/visiones-transversales-en-torno-a-circa-xx-miradas/?occurrence=2025-09-06",
+    "314926": "https://iaacc.es/exposiciones-actuales/",
+    "314927": "https://iaacc.es/events/vuestra-obra-circa-xx/?occurrence=2026-06-12"
+  }
 }

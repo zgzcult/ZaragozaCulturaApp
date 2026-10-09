@@ -12,19 +12,6 @@
     "agenda": "https://auditoriozaragoza.com/"
   },
   {
-    "place": "caixaforum",
-    "agenda": "https://caixaforum.org/es/zaragoza/actividades",
-    "pages": [
-      "https://caixaforum.org/es/zaragoza/actividades?p=15",
-      "https://caixaforum.org/es/zaragoza/exposiciones"
-    ],
-    "events": "/es/zaragoza/p/",
-    "hosts": [
-      "caixaforum.es"
-    ],
-    "browser": true
-  },
-  {
     "place": "sala oasis",
     "agenda": "https://www.salaoasis.com/agenda-oasis/",
     "events": "/events/",

@@ -8,6 +8,8 @@ link_overrides.json recoge lo que se decide al revisar los enlaces:
     home_only      webs que solo admiten enlaces a su portada: {web: portada}
     hidden         actividades que no se publican
     pending        sin página propia todavía; se repasan en la siguiente revisión
+    parked         enlaces revisados de webs ahora prohibidas, guardados por si
+                   llega su autorización (no se usan)
 
 Se aplican al entregar la agenda, por encima de lo que haya guardado la
 descarga, así que un cambio aquí se ve en cuanto se despliega el servidor.
