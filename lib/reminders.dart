@@ -198,8 +198,28 @@ class ReminderEntry {
   }
 }
 
-/// Días que un aviso ya llegado se conserva en el buzón.
+/// Días que un aviso ya llegado se conserva en el buzón como mucho.
 const int reminderLogDays = 14;
+
+/// Momento en que termina el día al que se refiere el aviso: el de la
+/// actividad (se avisa la víspera) o el domingo, si es el aviso del fin de
+/// semana (se avisa el jueves).
+DateTime reminderEventEnd(ReminderEntry entry) {
+  final day = DateTime(entry.when.year, entry.when.month, entry.when.day);
+  return day.add(Duration(days: entry.eventId == weekendPayload ? 4 : 2));
+}
+
+/// ¿Sigue en el buzón? Un aviso leído desaparece cuando pasa el día de la
+/// actividad; sin leer se conserva hasta [reminderLogDays] días.
+bool _keepsInInbox(ReminderEntry entry, DateTime now) {
+  if (entry.when.isAfter(now)) return false;
+  if (!entry.when.isAfter(
+    now.subtract(const Duration(days: reminderLogDays)),
+  )) {
+    return false;
+  }
+  return !(entry.read && !now.isBefore(reminderEventEnd(entry)));
+}
 
 /// Registro actualizado: se conservan los avisos que ya llegaron (hasta
 /// [reminderLogDays] días) y los programados se sustituyen por [plans].
@@ -208,10 +228,9 @@ List<ReminderEntry> mergeReminderLog(
   List<ReminderPlan> plans, {
   required DateTime now,
 }) {
-  final oldest = now.subtract(const Duration(days: reminderLogDays));
   final merged = <ReminderEntry>[
     for (final entry in existing)
-      if (!entry.when.isAfter(now) && entry.when.isAfter(oldest)) entry,
+      if (_keepsInInbox(entry, now)) entry,
     for (final plan in plans)
       if (plan.eventId.isNotEmpty && plan.when.isAfter(now))
         ReminderEntry(
@@ -230,10 +249,9 @@ List<ReminderEntry> deliveredReminders(
   List<ReminderEntry> log, {
   required DateTime now,
 }) {
-  final oldest = now.subtract(const Duration(days: reminderLogDays));
   return [
     for (final entry in log)
-      if (!entry.when.isAfter(now) && entry.when.isAfter(oldest)) entry,
+      if (_keepsInInbox(entry, now)) entry,
   ]..sort((a, b) => b.when.compareTo(a.when));
 }
 

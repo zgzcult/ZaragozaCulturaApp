@@ -4,7 +4,6 @@
     "308160": "https://zaragozadeporte.com/Evento.asp?id=7205",
     "308163": "https://zaragozadeporte.com/Evento.asp?id=7157",
     "308165": "https://zaragozadeporte.com/Evento.asp?id=7191",
-    "308306": "https://auditoriozaragoza.com/programacion/el-lago-de-los-cisnes-10/",
     "308526": "https://www.grandesvinos.com/blog/catas-vino-hoteles-zaragoza-2026/",
     "310532": "https://teatrodelmercadozaragoza.com/zaragoza-improvisa-2026/",
     "312378": "https://teatroprincipalzaragoza.com/la-comedia-de-la-olla/",
@@ -22,6 +21,7 @@
     "314071": "https://www.teatrodelasesquinas.com/es/programacion/c/869-el-funeral.html",
     "314263": "https://www.instagram.com/harinerazgz/",
     "314274": "https://www.teadiraragon.com/disco-disco-teadir-aragon-fundacion-nudos/",
+    "314569": "https://www.feriazaragoza.es/evento/fantasma-la-opera-2026",
     "314756": "https://www.cortesaragon.es/index.php?id=3269",
     "314774": "https://cultura.unizar.es/actividades/exposicion-paula-ortiz-int-noche-ext-dia",
     "314784": "https://cultura.unizar.es/actividades/exposicion-conspiranoia-narrativas-del-complot",
@@ -41,6 +41,9 @@
     "lasarmas.es",
     "zaragoza.es"
   ],
+  "home_only": {
+    "auditoriozaragoza.com": "https://auditoriozaragoza.com/"
+  },
   "hidden": [
     "311855"
   ],

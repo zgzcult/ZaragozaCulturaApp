@@ -85,6 +85,56 @@ void main() {
       expect(deliveredReminders(log, now: _now), hasLength(1));
     });
 
+    test('un aviso leído desaparece al pasar el día de la actividad', () {
+      // Aviso del jueves 8 a las 18:00 para una actividad del viernes 9.
+      final leido = ReminderEntry(
+        eventId: _id,
+        when: DateTime(2026, 10, 8, 18),
+        title: 'Mañana: Noche de jazz',
+        body: '20:30',
+        read: true,
+      );
+      final sinLeer = ReminderEntry(
+        eventId: 'otro',
+        when: DateTime(2026, 10, 8, 18),
+        title: 'Mañana: Teatro',
+        body: '',
+      );
+      List<String> ids(DateTime now) => [
+        for (final e in deliveredReminders([leido, sinLeer], now: now))
+          e.eventId,
+      ];
+      // El mismo día de la actividad sigue ahí aunque esté leído.
+      expect(ids(DateTime(2026, 10, 9, 23, 59)), containsAll([_id, 'otro']));
+      // Pasado ese día, el leído desaparece y el no leído se queda.
+      expect(ids(DateTime(2026, 10, 10, 0, 1)), ['otro']);
+      // También se limpia del registro guardado.
+      final log = mergeReminderLog(
+        [leido, sinLeer],
+        const [],
+        now: DateTime(2026, 10, 10, 9),
+      );
+      expect(log.map((e) => e.eventId), ['otro']);
+    });
+
+    test('el aviso del fin de semana dura hasta que acaba el domingo', () {
+      final aviso = ReminderEntry(
+        eventId: weekendPayload,
+        when: DateTime(2026, 10, 8, 17), // jueves
+        title: 'Sugerencias para el fin de semana',
+        body: '',
+        read: true,
+      );
+      expect(
+        deliveredReminders([aviso], now: DateTime(2026, 10, 11, 22)),
+        hasLength(1),
+      );
+      expect(
+        deliveredReminders([aviso], now: DateTime(2026, 10, 12, 8)),
+        isEmpty,
+      );
+    });
+
     test(
       'al reprogramar se conservan los llegados y se sustituyen los futuros',
       () {

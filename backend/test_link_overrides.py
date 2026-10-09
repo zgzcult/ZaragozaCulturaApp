@@ -20,7 +20,7 @@ def event(code="7", url="https://teatro.example.org/", **extra):
 
 
 def rules(**changes):
-    base = {"links": {}, "no_link": set(), "blocked_hosts": set(), "hidden": set(), "pending": set()}
+    base = {"links": {}, "no_link": set(), "blocked_hosts": set(), "home_only": {}, "hidden": set(), "pending": set()}
     return {**base, **changes}
 
 
@@ -64,6 +64,21 @@ class ApplyTests(unittest.TestCase):
         out = self.one(event(), links={"7": FICHA}, blocked_hosts={"zaragoza.es"})[0]
         self.assertTrue(out["hideLink"])
 
+    def test_web_que_solo_admite_enlaces_a_su_portada(self):
+        home = {"auditoriozaragoza.com": "https://auditoriozaragoza.com/"}
+        for url in (
+            "https://auditoriozaragoza.com/programacion/el-lago-de-los-cisnes-10/",
+            "http://www.auditoriozaragoza.com/agenda/",
+            "https://auditoriozaragoza.com/",
+        ):
+            out = self.one(event(url=url), home_only=home)[0]
+            self.assertEqual(out["moreInfoUrl"], "https://auditoriozaragoza.com/", url)
+            self.assertFalse(out["hideLink"])
+        fixed = self.one(event(), links={"7": "https://auditoriozaragoza.com/programacion/x/"}, home_only=home)[0]
+        self.assertEqual(fixed["moreInfoUrl"], "https://auditoriozaragoza.com/")
+        other = self.one(event(), home_only=home)[0]
+        self.assertEqual(other["moreInfoUrl"], "https://teatro.example.org/")
+
     def test_actividad_oculta(self):
         out = lo.apply([event("7"), event("8")], rules(hidden={"7"}))
         self.assertEqual([e["sourceId"] for e in out], ["8"])
@@ -102,6 +117,7 @@ class LoadTests(unittest.TestCase):
             self.assertTrue(code.isdigit(), code)
             self.assertTrue(url.startswith("https://"), url)
             self.assertNotIn(lo.host_of(url), data["blocked_hosts"], url)
+            self.assertNotIn(lo.host_of(url), data["home_only"], url)
 
 
 if __name__ == "__main__":
