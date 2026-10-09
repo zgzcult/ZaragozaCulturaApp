@@ -128,12 +128,40 @@ def get_weather_payload(fetch=None):
     return payload
 
 
+# Datos prácticos del lugar (teléfono, autobuses, accesibilidad). La descarga
+# los guarda en cada actividad; a la app se le dan aparte, una vez por lugar.
+VENUE_FIELDS = {"venuePhone": "phone", "venueTransport": "transport", "venueAccessibility": "accessibility"}
+VENUES_CACHE_SECONDS = 30 * 60
+_venues_cache = {}
+
+
+def venues_from(events):
+    """{nombre del lugar: {phone, transport, accessibility}} con lo que haya."""
+    venues = {}
+    for event in events:
+        place = str(event.get("place") or "").strip()
+        info = {name: event[field] for field, name in VENUE_FIELDS.items() if event.get(field)}
+        if place and info and len(info) >= len(venues.get(place, {})):
+            venues[place] = info
+    return venues
+
+
+def get_venues_payload():
+    hit = _venues_cache.get("all")
+    if hit and time.time() - hit[0] < VENUES_CACHE_SECONDS:
+        return hit[1]
+    payload = json.dumps(venues_from(get_events_from_db()), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    _venues_cache["all"] = (time.time(), payload)
+    return payload
+
+
 def get_payload(days):
     """JSON compacto en bytes, con caché en memoria."""
     hit = _cache.get(days)
     if hit and time.time() - hit[0] < CACHE_SECONDS:
         return hit[1]
     events = link_overrides.apply(rewrites.publish(get_events_from_db(days), REWRITES), LINKS)
+    events = [{k: v for k, v in event.items() if k not in VENUE_FIELDS} for event in events]
     payload = json.dumps(events, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     _cache[days] = (time.time(), payload)
     return payload
@@ -334,6 +362,22 @@ class EventHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+
+        if url.path == "/venues":
+            try:
+                payload = get_venues_payload()
+                self.send_response(200)
+            except Exception as exc:
+                payload = json.dumps({"error": str(exc)}).encode("utf-8")
+                self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            if "gzip" in self.headers.get("Accept-Encoding", ""):
+                payload = gzip.compress(payload, compresslevel=6)
+                self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
             return
 
         if url.path == "/rewrites/pending":

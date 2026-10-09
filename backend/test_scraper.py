@@ -110,5 +110,33 @@ class VenueWebsiteTests(unittest.TestCase):
         self.assertEqual(scraper.external_url(None), "")
 
 
+class VenueDetailsTests(unittest.TestCase):
+    LOCATION = {
+        "id": 6011,
+        "title": "Centro de Historias",
+        "telephone": "976 721 885 ",
+        "publicTransport": "22, 35,\r\n36",
+        "accessibility": "<div><img alt='Accesible' src='x.jpg' /> Accesible</div><p>Aseos adaptados: <b>Sí</b></p>",
+    }
+
+    def test_limpia_y_guarda_solo_lo_que_hay(self):
+        details = scraper.venue_details(self.LOCATION)
+        self.assertEqual(details["venuePhone"], "976 721 885")
+        self.assertEqual(details["venueTransport"], "22, 35, 36")
+        self.assertNotIn("<", details["venueAccessibility"])
+        self.assertIn("Aseos adaptados", details["venueAccessibility"])
+        self.assertEqual(scraper.venue_details({"title": "Plaza"}), {})
+        self.assertEqual(scraper.venue_details("Plaza del Pilar"), {})
+
+    def test_cada_sesion_lleva_los_datos_del_lugar(self):
+        source = activity()
+        source["subEvent"][0]["location"] = self.LOCATION
+        events = scraper.dataset_event_occurrences(source, limit=5)
+        self.assertTrue(events)
+        self.assertEqual(events[0]["venuePhone"], "976 721 885")
+        plain = scraper.dataset_event_occurrences(activity(), limit=5)
+        self.assertNotIn("venuePhone", plain[0])
+
+
 if __name__ == "__main__":
     unittest.main()

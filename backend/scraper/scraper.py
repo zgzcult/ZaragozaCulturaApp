@@ -451,6 +451,19 @@ def is_free(source: Dict[str, Any]) -> bool:
     return True
 
 
+def venue_details(location: Any) -> Dict[str, str]:
+    """Datos prácticos del lugar que publica el Ayuntamiento con cada acto:
+    teléfono, autobuses y accesibilidad. Solo los que existan."""
+    if not isinstance(location, dict):
+        return {}
+    details = {
+        "venuePhone": normalize_text(location.get("telephone")),
+        "venueTransport": " ".join(normalize_text(location.get("publicTransport")).split()),
+        "venueAccessibility": clean_html_to_text(normalize_text(location.get("accessibility")))[:1500],
+    }
+    return {key: value for key, value in details.items() if value}
+
+
 def dataset_event_occurrences(
     source: Dict[str, Any],
     limit: int,
@@ -493,6 +506,7 @@ def dataset_event_occurrences(
         location = sub_event.get("location") or {}
         place = normalize_text(location.get("title") if isinstance(location, dict) else location) or normalize_text(source.get("location"))
         coords = coordinates_of(location) or coordinates_of(source)
+        venue = venue_details(location)
         # Si la actividad no tiene enlace propio y se celebra en un lugar con
         # web (un teatro o una sala privados), «Más información» lleva allí.
         info_url = more_info_url
@@ -534,6 +548,7 @@ def dataset_event_occurrences(
                     "source": "ayuntamiento",
                     "sourceId": str(source.get("id", "")),
                     "free": free,
+                    **venue,
                     "endDate": event_date,
                     # Duración total del acto (no de este día): la app lo usa
                     # para dejar al final las actividades de larga duración.

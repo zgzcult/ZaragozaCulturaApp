@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'ads.dart';
 import 'crash_reporter.dart';
 import 'event_classifier.dart';
+import 'event_extras.dart';
 import 'event_submission.dart';
 import 'home.dart';
 import 'legal_notice.dart';
@@ -222,6 +223,9 @@ class CulturalEvent {
   /// La actividad no lleva enlace: no se enseña «Más información».
   final bool hideLink;
 
+  /// Código del acto en su origen: el mismo para todas sus fechas.
+  final String sourceId;
+
   /// Coordenadas del lugar (para "Cerca de mí"); null si no se conocen.
   final double? lat;
   final double? lng;
@@ -250,6 +254,7 @@ class CulturalEvent {
     this.source = 'ayuntamiento',
     this.free = false,
     this.hideLink = false,
+    this.sourceId = '',
     this.runStart = '',
     this.runEnd = '',
     this.lat,
@@ -293,6 +298,7 @@ class CulturalEvent {
       source: (json['source'] ?? 'ayuntamiento').toString(),
       free: json['free'] == true,
       hideLink: json['hideLink'] == true,
+      sourceId: (json['sourceId'] ?? '').toString(),
       runStart: (json['runStartDate'] ?? '').toString(),
       runEnd: (json['runEndDate'] ?? '').toString(),
       lat: (json['lat'] as num?)?.toDouble(),
@@ -337,6 +343,7 @@ class CulturalEvent {
       source: source,
       free: free,
       hideLink: hideLink,
+      sourceId: sourceId,
       runStart: start ?? runStart,
       runEnd: end ?? runEnd,
       lat: lat,
@@ -2189,11 +2196,17 @@ class EventDetailScreen extends StatefulWidget {
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
 
+  /// De dónde salen las otras fechas del acto y los datos del lugar.
+  final ZaragozaEventsRepository repository;
+  final VenuesRepository venues;
+
   const EventDetailScreen({
     super.key,
     required this.event,
     required this.isFavorite,
     required this.onToggleFavorite,
+    this.repository = const ZaragozaEventsRepository(),
+    this.venues = const HttpVenuesRepository(),
   });
 
   @override
@@ -2256,6 +2269,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('No se pudo abrir la información del evento');
     }
+  }
+
+  /// La ficha oficial de la actividad, enlazada desde la cita de la fuente.
+  Future<void> _openSource() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final uri = Uri.parse(event.officialUrl);
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {}
+    messenger.showSnackBar(
+      const SnackBar(content: Text('No se pudo abrir el enlace.')),
+    );
   }
 
   static const double _headerHeight = 300;
@@ -2459,22 +2484,19 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ),
                     ),
                   ],
-                  // Origen de los datos: solo en las actividades que se
-                  // extraen de la agenda del Ayuntamiento, con la fecha de su
-                  // última actualización.
+                  EventExtras(
+                    event: event,
+                    repository: widget.repository,
+                    venues: widget.venues,
+                  ),
+                  // Fuente: solo en las actividades que se extraen de la
+                  // agenda del Ayuntamiento, con enlace a su ficha oficial y
+                  // la fecha de su última actualización.
                   if (event.fromAyuntamiento) ...[
                     const SizedBox(height: 22),
-                    Text(
-                      originText(
-                        DateTime.tryParse(event.updatedAt),
-                        service: 'Servicio de Cultura',
-                      ),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.5,
-                        fontWeight: FontWeight.w600,
-                        color: Brand.slate,
-                      ),
+                    SourceLine(
+                      updated: DateTime.tryParse(event.updatedAt),
+                      onOpen: _openSource,
                     ),
                   ],
                 ],

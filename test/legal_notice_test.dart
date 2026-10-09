@@ -163,9 +163,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text(
-          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de '
-          'Cultura). Información actualizada por última vez el 5 de octubre '
-          'de 2026.',
+          'Fuente: Ayuntamiento de Zaragoza · Actualizado el 5 de octubre de 2026',
         ),
         findsOneWidget,
       );
@@ -198,7 +196,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('Origen de los datos'), findsNothing);
+      expect(find.textContaining('Fuente:'), findsNothing);
       await tester.binding.setSurfaceSize(null);
     });
 

@@ -5,6 +5,7 @@
 /// actividades; el resto de condiciones de reutilización están en «Acerca de».
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'brand.dart';
@@ -52,6 +53,58 @@ String originText(DateTime? updated, {String? service}) {
   return updated == null
       ? '$base.'
       : '$base. Información actualizada por última vez el ${longDate(updated)}.';
+}
+
+/// «Fuente: Ayuntamiento de Zaragoza · Actualizado el 8 de octubre de 2026».
+String sourceText(DateTime? updated) => updated == null
+    ? 'Fuente: Ayuntamiento de Zaragoza'
+    : 'Fuente: Ayuntamiento de Zaragoza · Actualizado el ${longDate(updated)}';
+
+/// Cita de la fuente al final de la ficha de una actividad. El nombre del
+/// Ayuntamiento es un enlace a la ficha oficial de esa actividad.
+class SourceLine extends StatefulWidget {
+  final DateTime? updated;
+  final VoidCallback onOpen;
+
+  const SourceLine({super.key, required this.updated, required this.onOpen});
+
+  @override
+  State<SourceLine> createState() => _SourceLineState();
+}
+
+class _SourceLineState extends State<SourceLine> {
+  late final TapGestureRecognizer _tap = TapGestureRecognizer()
+    ..onTap = () => widget.onOpen();
+
+  @override
+  void dispose() {
+    _tap.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final updated = widget.updated;
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(text: 'Fuente: '),
+          TextSpan(
+            text: 'Ayuntamiento de Zaragoza',
+            recognizer: _tap,
+            style: const TextStyle(
+              color: Brand.skyDeep,
+              decoration: TextDecoration.underline,
+              decorationColor: Brand.skyDeep,
+            ),
+          ),
+          if (updated != null)
+            TextSpan(text: ' · Actualizado el ${longDate(updated)}'),
+        ],
+      ),
+      style: const TextStyle(fontSize: 12, height: 1.5, color: Brand.slate),
+    );
+  }
 }
 
 /// Línea de origen al final de la lista de actividades.

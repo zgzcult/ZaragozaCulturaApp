@@ -167,9 +167,7 @@ void main() {
       expect(find.text('Concierto de prueba'), findsOneWidget);
       expect(
         find.text(
-          'Origen de los datos: Ayuntamiento de Zaragoza (Servicio de '
-          'Cultura). Información actualizada por última vez el 5 de octubre '
-          'de 2026.',
+          'Fuente: Ayuntamiento de Zaragoza · Actualizado el 5 de octubre de 2026',
         ),
         findsOneWidget,
       );
