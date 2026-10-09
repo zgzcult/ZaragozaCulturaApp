@@ -642,6 +642,24 @@ def extract_event_links(raw_html: str, base_url: str) -> List[str]:
     return sorted(urls)
 
 
+def refine_venue_links(events: List[Dict[str, Any]], **options: Any) -> int:
+    """Enlace a la página propia del acto en la web de cada lugar apuntado en
+    venue_agendas.json. Si falla, se quedan los enlaces que había."""
+    try:
+        # El Python de este equipo no busca módulos en la carpeta del script.
+        folder = str(Path(__file__).resolve().parent)
+        if folder not in sys.path:
+            sys.path.insert(0, folder)
+        import venue_links
+
+        exact = venue_links.apply(events, **options)
+        print(f"[OK] {exact} sesiones enlazan a la página de su acto en la web del lugar", file=sys.stderr)
+        return exact
+    except Exception as exc:  # noqa: BLE001 - es una mejora, no puede tumbar la descarga
+        print(f"[WARN] No se pudieron afinar los enlaces de los lugares: {exc}", file=sys.stderr)
+        return 0
+
+
 def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
     try:
         dataset_events: List[Dict[str, Any]] = []
@@ -664,15 +682,7 @@ def collect_events(base_url: str, limit: int = 200) -> List[Dict[str, Any]]:
             except (HTTPError, URLError, TimeoutError, ValueError):
                 source["moreInfoUrl"] = source.get("alt") or ""
             dataset_events.extend(dataset_event_occurrences(source, limit, public_ids, venue_website))
-        # Enlace a la página propia del acto en la web de cada lugar apuntado
-        # en venue_agendas.json. Si falla, se quedan los enlaces que había.
-        try:
-            import venue_links
-
-            exact = venue_links.apply(dataset_events)
-            print(f"[OK] {exact} sesiones enlazan a la página de su acto en la web del lugar", file=sys.stderr)
-        except Exception as exc:  # noqa: BLE001 - es una mejora, no puede tumbar la descarga
-            print(f"[WARN] No se pudieron afinar los enlaces de los lugares: {exc}", file=sys.stderr)
+        refine_venue_links(dataset_events)
         dataset_events.sort(key=lambda event: (event["date"], event["time"], event["title"]))
         if dataset_events:
             return dataset_events[:limit]
