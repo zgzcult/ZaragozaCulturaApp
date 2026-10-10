@@ -161,7 +161,7 @@ const List<CityRoute> cityRoutes = [
   ),
   CityRoute(
     id: 'sitios',
-    image: 'https://www.basilicasantaengracia.es/wp-content/uploads/2019/01/basilica-santa-engracia_opt.jpg',
+    image: 'https://www.zaragoza.es/azar/img/monumentos/sitiosp.jpg',
     title: 'Los Sitios de Zaragoza',
     subtitle: '1808-1809',
     icon: Icons.flag_outlined,

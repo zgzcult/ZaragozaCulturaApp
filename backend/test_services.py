@@ -111,7 +111,7 @@ class CollectTests(unittest.TestCase):
         self.assertIn("Cita previa: 976 306 841", almozara["info"])
         self.assertIn("Atención a domicilio: 876 765 121", almozara["info"])
         self.assertIn("Sector Zaragoza II", almozara["info"])
-        self.assertTrue(almozara["url"].startswith("https://sectorzaragozados.salud.aragon.es/"))
+        self.assertEqual(almozara["url"], "")
 
     def test_solo_zaragoza_capital_con_los_tres_sectores(self):
         items = {i["name"]: i for i in services.health_centres()}
@@ -123,15 +123,9 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(oliver["call"], "976346359")
         self.assertIn("Sector Zaragoza III", oliver["info"])
         self.assertNotIn("Cita previa", oliver["info"])  # la fuente no la indica
-        # Enlaza a la página pública del sector, no al conjunto de datos
-        # abiertos (que exige identificación).
-        self.assertEqual(
-            oliver["url"],
-            "https://www.aragon.es/sanidad-profesionales/centros-sanitarios/sector-sanitario-zaragoza-iii",
-        )
-        self.assertTrue(items["Picarral"]["url"].endswith("sector-sanitario-zaragoza-i"))
+        # Sin enlace a las webs del Gobierno de Aragón: exigen autorización.
         for item in items.values():
-            self.assertNotIn("opendata", item["url"])
+            self.assertEqual(item["url"], "")
 
 
 def _farmacia(i, fecha="2026-10-06T00:00:00"):

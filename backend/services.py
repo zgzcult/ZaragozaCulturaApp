@@ -64,7 +64,10 @@ def health_centres(path: str = CENTROS_SALUD_FILE) -> List[Dict[str, Any]]:
                 "call": first_phone(centre.get("phone", "")),
                 "horario": "",
                 "info": "\n".join(x for x in info if x),
-                "url": source.get("url", ""),
+                # Sin enlace: el aviso legal del Gobierno de Aragón exige pedir
+                # autorización para enlazar a sus páginas. La procedencia de
+                # los datos sigue anotada en centros_salud.json.
+                "url": "",
                 "lat": None,
                 "lng": None,
             }
