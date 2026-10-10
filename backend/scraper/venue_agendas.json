@@ -30,5 +30,13 @@
   {
     "place": "harinera",
     "agenda": "https://www.instagram.com/harinerazgz/"
+  },
+  {
+    "place": "joaquin roncal",
+    "agenda": "https://entradas.ibercaja.es/eventos/centro-joaquin-roncal/",
+    "hosts": [
+      "joaquinroncal.org",
+      "fundacioncai.es"
+    ]
   }
 ]
