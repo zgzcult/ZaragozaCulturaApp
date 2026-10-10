@@ -380,6 +380,21 @@ class EventHandler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
+        if url.path == "/links/unreviewed":
+            # Webs nuevas pendientes de revisar su aviso legal antes de enlazarlas.
+            try:
+                data = link_overrides.unreviewed_hosts(get_events_from_db(), LINKS)
+                payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                self.send_response(200)
+            except Exception as exc:
+                payload = json.dumps({"error": str(exc)}).encode("utf-8")
+                self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
         if url.path == "/rewrites/pending":
             # Para la herramienta que mantiene las descripciones propias.
             try:
