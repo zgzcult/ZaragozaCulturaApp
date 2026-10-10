@@ -8,7 +8,8 @@ link_overrides.json recoge lo que se decide al revisar los enlaces:
                    se enlaza a estas: una web nueva queda sin enlace hasta
                    revisarla
     blocked_hosts  webs a las que nunca se enlaza: la actividad queda sin enlace
-    home_only      webs que solo admiten enlaces a su portada: {web: portada}
+    home_only      webs que solo admiten enlaces a su portada, y dominios antiguos
+                   que hay que llevar a la web actual: {web: dirección}
     hidden         actividades que no se publican
     pending        sin página propia todavía; se repasan en la siguiente revisión
     parked         enlaces revisados de webs ahora prohibidas, guardados por si

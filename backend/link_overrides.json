@@ -48,6 +48,7 @@
     "entradium.com",
     "espaciozity.es",
     "feriazaragoza.es",
+    "fundacioncai.es",
     "fundacionibercaja.es",
     "grandesvinos.com",
     "instagram.com",
@@ -62,6 +63,7 @@
     "pilargastroweek.com",
     "plazadetorosdezaragoza.es",
     "principefelipe.zaragozadeporte.com",
+    "puertovenecia.com",
     "quejarte.com",
     "rockandbluescafe.com",
     "salalopez.com",
@@ -90,12 +92,16 @@
     "lasarmas.es",
     "raee.aragon.es",
     "redescena.net",
+    "seap.minhap.gob.es",
     "teatroarbole.es",
     "unizar.es",
     "zaragoza.es"
   ],
   "home_only": {
-    "auditoriozaragoza.com": "https://auditoriozaragoza.com/"
+    "auditoriozaragoza.com": "https://auditoriozaragoza.com/",
+    "joaquinroncal.org": "https://www.fundacioncai.es/",
+    "intupuertovenecia.com": "https://www.puertovenecia.com/",
+    "lasfoodtrucks.com": "https://lasfoodtrucks.es/"
   },
   "hidden": [
     "311855"
