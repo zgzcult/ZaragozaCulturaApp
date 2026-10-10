@@ -123,10 +123,10 @@ void main() {
       'Monumentos',
       'Rutas',
       'Cine',
-      'Servicios',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
+    expect(find.text('Servicios'), findsNothing);
     expect(find.text('Para hoy'), findsNothing);
 
     // Hoy te recomendamos: «Ahora» para lo que está en marcha, hora si no.

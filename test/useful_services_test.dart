@@ -157,16 +157,17 @@ void main() {
       expect(find.text('Reintentar'), findsOneWidget);
     });
 
-    testWidgets('la pantalla principal lleva a Servicios útiles', (
+    testWidgets('la portada ya no enseña el acceso a Servicios útiles', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(const Size(400, 800));
       await tester.pumpWidget(
         MaterialApp(home: HomeScreen(servicesRepository: _Repo(groups))),
       );
-      await tester.tap(find.text('Servicios'));
       await tester.pumpAndSettle();
-      expect(find.text('Bibliotecas municipales'), findsOneWidget);
+      expect(showServicesShortcut, isFalse);
+      expect(find.text('Servicios'), findsNothing);
+      expect(find.text('Cine'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
     });
   });

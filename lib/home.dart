@@ -91,6 +91,11 @@ String headerDateLabel(DateTime now, int? temperature) {
   return temperature == null ? date : '$date · $temperature°';
 }
 
+/// «Servicios útiles» (farmacias, centros de salud, bibliotecas) está
+/// retirado de la portada. La pantalla y sus datos se conservan: basta poner
+/// esto a true para volver a enseñar el acceso.
+const bool showServicesShortcut = false;
+
 class HomeScreen extends StatefulWidget {
   final ZaragozaEventsRepository repository;
   final LocationService locationService;
@@ -368,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(height: 22),
-            // Accesos a las secciones: dos filas de tres.
+            // Accesos a las secciones, en dos filas.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -413,17 +418,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         color: Brand.coralDeep,
                         onTap: () => _open(const CinemasScreen()),
                       ),
-                      const SizedBox(width: 10),
-                      _Shortcut(
-                        icon: Icons.health_and_safety_outlined,
-                        label: 'Servicios',
-                        color: Brand.green,
-                        onTap: () => _open(
-                          UsefulServicesScreen(
-                            repository: widget.servicesRepository,
+                      if (showServicesShortcut) ...[
+                        const SizedBox(width: 10),
+                        _Shortcut(
+                          icon: Icons.health_and_safety_outlined,
+                          label: 'Servicios',
+                          color: Brand.green,
+                          onTap: () => _open(
+                            UsefulServicesScreen(
+                              repository: widget.servicesRepository,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ],

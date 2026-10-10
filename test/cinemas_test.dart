@@ -90,18 +90,19 @@ void main() {
   });
 
   testWidgets(
-    'los accesos van en dos filas de tres, con Cine entre Rutas y Servicios',
+    'los accesos van en dos filas, con Cine junto a Rutas en la segunda',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(400, 1600));
       await tester.pumpWidget(_home());
       await tester.pumpAndSettle();
       Offset at(String label) => tester.getCenter(find.text(label));
       final first = ['Agenda', 'Sugerencias fin de semana', 'Monumentos'];
-      final second = ['Rutas', 'Cine', 'Servicios'];
+      final second = ['Rutas', 'Cine'];
       for (final row in [first, second]) {
-        expect(at(row[0]).dx, lessThan(at(row[1]).dx));
-        expect(at(row[1]).dx, lessThan(at(row[2]).dx));
-        expect((at(row[0]).dy - at(row[2]).dy).abs(), lessThan(12));
+        for (var i = 1; i < row.length; i++) {
+          expect(at(row[i - 1]).dx, lessThan(at(row[i]).dx));
+          expect((at(row[0]).dy - at(row[i]).dy).abs(), lessThan(12));
+        }
       }
       expect(at(first[0]).dy, lessThan(at(second[0]).dy));
 

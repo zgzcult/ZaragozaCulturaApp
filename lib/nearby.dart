@@ -651,16 +651,14 @@ class _NearbyScreenState extends State<NearbyScreen> {
                 ),
               MarkerLayer(markers: markers),
               if (widget.enableTiles)
-                RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution(
-                      'OpenStreetMap contributors',
-                      onTap: () => launchUrl(
-                        Uri.parse('https://www.openstreetmap.org/copyright'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                    ),
-                  ],
+                // Siempre a la vista, como pide la política de uso de
+                // OpenStreetMap (no vale esconderla tras un botón).
+                SimpleAttributionWidget(
+                  source: const Text('OpenStreetMap contributors'),
+                  onTap: () => launchUrl(
+                    Uri.parse('https://www.openstreetmap.org/copyright'),
+                    mode: LaunchMode.externalApplication,
+                  ),
                 ),
             ],
           ),

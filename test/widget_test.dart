@@ -21,10 +21,10 @@ void main() {
       'Monumentos',
       'Rutas',
       'Cine',
-      'Servicios',
     ]) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
+    expect(find.text('Servicios'), findsNothing);
   });
 
   testWidgets('Agenda abre la agenda y se puede volver al inicio', (
